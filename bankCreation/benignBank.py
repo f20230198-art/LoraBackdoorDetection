@@ -69,10 +69,21 @@ def train_adapter(model, tokenizer, ds_name: str, ds_cfg: dict, sub_idx: int, gl
 
     # 2. Dataset logic
     try:
-        raw = load_dataset(ds_name, ds_cfg.get("subset"), split=ds_cfg["split"], trust_remote_code=True)
-        ds = raw.shuffle(seed=sub_idx).select(
-            range(min(len(raw), config.MAX_SAMPLES_PER_ADAPTER))
+        # Stream the dataset and pull only the rows we actually use. Some sources
+        # (e.g. natural_questions) are 40+ GB; downloading the whole thing just to
+        # keep a few hundred examples wasted hours, so we read incrementally.
+        from datasets import Dataset
+
+        n_take = config.MAX_SAMPLES_PER_ADAPTER
+        stream = load_dataset(
+            ds_name, ds_cfg.get("subset"), split=ds_cfg["split"],
+            trust_remote_code=True, streaming=True,
         )
+        stream = stream.shuffle(seed=sub_idx, buffer_size=max(1000, n_take))
+        rows = list(stream.take(n_take))
+        if not rows:
+            raise RuntimeError("no rows returned from stream")
+        ds = Dataset.from_list(rows)
 
         def proc(exs):
             formatted = [
