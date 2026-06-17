@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+ 
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data directories (IMPORTANT - don't upload these!)
+data/
+adapters/
+output/
+
+# Large analysis artifacts (do not version)
+plotScripts/crossModelPlots/cross_model_results.json
+logs/
+*.pkl
+*.pth
+*.bin
+*.safetensors
+evaluation/extra/
+
+# Environment variables
+.env
+.env.local
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Training outputs
+wandb/
+runs/
+checkpoints/
+
+# Experiment results (large files)
+experiment_results/
+trash/
+*.npy
+*.log
+poison.log
+experiment.log
+training.log
+
+# Model checkpoints and adapters
+*.pt
+*.optimizer
+*.scheduler
+adapter_model.safetensors
+
+#results
+#results/*
+output/
+
+# Generated adapter banks (regenerated on GPU)
+output_*/
+
+# Local venv (Windows naming used in this project)
+.venv312/
+
+# Local staging folder for manual Drive uploads (no longer needed with git)
+_upload/
+
+# Literature / non-code material kept locally, not in the code repo
+literature/
