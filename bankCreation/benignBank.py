@@ -209,9 +209,24 @@ def main():
         token=config.HF_TOKEN,
     )
 
+    # LBD_MAX_TOTAL: stop after N adapters TOTAL while keeping the exact same
+    # dataset order and global index numbering as the full run. This is what makes
+    # a partial run resumable into a larger one: the 100 adapters made tonight get
+    # indices benign_001..benign_100 — identical to what they'd be in the full 400
+    # — so a later full run's resume-skip recognizes and skips them (no rework).
+    # (Unlike LBD_MAX_PER_DATASET, which caps per-dataset and SHIFTS the global
+    # indices, breaking that resume. Use LBD_MAX_TOTAL for real partial runs;
+    # LBD_MAX_PER_DATASET stays only for tiny smoke tests.)
+    max_total = int(os.environ.get("LBD_MAX_TOTAL", "0")) or None
+
     g_idx = 0
+    done = False
     for cat, dss in config.DATASET_CONFIGS.items():
+        if done:
+            break
         for name, cfg in dss.items():
+            if done:
+                break
             n = cfg["count"]
             if config.MAX_PER_DATASET is not None:
                 n = min(n, config.MAX_PER_DATASET)
@@ -220,6 +235,10 @@ def main():
                 train_adapter(base_model, tokenizer, name, cfg, i, g_idx)
                 if sync_every and g_idx % sync_every == 0:
                     checkpoint_to_drive()
+                if max_total is not None and g_idx >= max_total:
+                    log(f"Reached LBD_MAX_TOTAL={max_total}; stopping.")
+                    done = True
+                    break
 
     # Final sync so the last batch of adapters lands on Drive too.
     checkpoint_to_drive()

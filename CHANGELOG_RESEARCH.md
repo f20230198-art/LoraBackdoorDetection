@@ -48,6 +48,29 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-18 (later) — Resumable partial runs (LBD_MAX_TOTAL) + confirmed optimized timing
+
+**Optimization confirmed (probe #2).** Re-ran the 8-adapter probe on the pushed,
+dynamic-padding code. Typical adapter dropped ~4.3 min → **~2.6 min** (1.6–2x), matching
+the prediction. natural_questions 13 min → 8 min. Full per-dataset numbers in Measurements
+log. Decision: generate the benign bank in two overnight sessions (user can run ~10 h/night,
+400 ≈ 17 h) rather than one — relying on resume-skip to continue across nights.
+
+**LBD_MAX_TOTAL — resumable partial runs.**
+- *What:* New env knob to stop after N adapters TOTAL while preserving the exact dataset
+  order and global index numbering of the full run.
+- *Why:* The user wants to run ~100 benign first (catch downstream bugs cheaply), then later
+  finish to 400 WITHOUT redoing the 100. The pre-existing `LBD_MAX_PER_DATASET` cap does NOT
+  support this: it caps each dataset, which shifts every global index, so the partial run's
+  filenames (`benign_NNN_dataset`) don't match the full run's — resume-skip wouldn't
+  recognize them and would retrain. The fix had to keep indices identical.
+- *How:* `LBD_MAX_TOTAL` runs the normal dataset loop with normal `g_idx` numbering and
+  simply stops once `g_idx >= N`. So a 100-run produces `benign_001..benign_100` exactly as
+  the 400-run would → a later full run skips them and trains only 101..400. Zero rework.
+- *Paper relevance:* Internal only (reproducibility/compute-staging). The fact that the
+  benign bank was generated incrementally across sessions is worth one sentence in setup if
+  reviewers ask about compute.
+
 ### 2026-06-18 — Timing-probe-driven optimization of the adapter-generation pipeline
 
 Context: about to generate the real benign/poison/test banks at paper scale on Colab Pro+
@@ -143,9 +166,26 @@ the raw probe numbers.
 - Note: one mid-run interruption observed that auto-resumed (cause TBD — disconnect vs.
   error; confirm and record). Motivates the crash-safety changes above.
 
-### 2026-06-18 — Timing probe #2 (AFTER optimization) — PENDING
-- To be filled after re-running the probe on the pushed/optimized code. Expected ~2 min/
-  adapter. Record the same per-dataset table and recompute the 400-run cost.
+### 2026-06-18 — Timing probe #2 (AFTER dynamic-padding optimization)
+- Same setup as probe #1 (A100 High-RAM, real settings, 1 adapter/dataset).
+- Per-adapter, before → after:
+  | dataset | before | after |
+  |---|---|---|
+  | alpaca | 4m17s | 2m29s |
+  | dolly | 4m12s | 3m11s |
+  | gsm8k | 4m22s | 2m46s |
+  | ai2_arc | 1m41s | 0m59s |
+  | squad_v2 | 4m18s | 2m45s |
+  | natural_questions | 12m59s | 8m11s |
+  | openai_humaneval | 0m22s | 0m18s |
+  | glue | ~4m56s | ~2m26s |
+- **Typical adapter ≈ 2.6 min** post-optimization (was ~4.3). ~1.6–2x speedup, no modeling
+  change. natural_questions remains the outlier (8 min; ~6.5 h across 50 in the full run —
+  candidate for a sample-count cut if needed).
+- Cost projection (post-opt, ~13 units/hr): 400 benign ≈ 17 h ≈ ~225 units; full pipeline
+  (600) ≈ ~25 h ≈ ~330 units. Budget = 1500 units → comfortable.
+- Plan: benign bank generated ~100 first (this run), then to 400 across overnight sessions
+  via resume-skip + LBD_MAX_TOTAL.
 
 ---
 
