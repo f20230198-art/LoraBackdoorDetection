@@ -97,9 +97,16 @@ def train_test_adapter(model, tokenizer, idx, mode):
             # Fallback format if dataset not in config
             format_fn = lambda ex: f"{ex.get('instruction', ex.get('question', ''))} {ex.get('output', ex.get('answer', ''))}"
 
-        raw = load_dataset(ds_name, subset, split="train", trust_remote_code=True)
-        # Use seed 400-449 (just after calibration benign seeds 0-399)
-        ds = raw.shuffle(seed=idx + 400).select(range(min(len(raw), config.MAX_SAMPLES_PER_ADAPTER)))
+        # Stream and take only the rows we need (see benignBank.py): some sources
+        # (natural_questions) are 40+ GB and a full load just to keep a few hundred
+        # rows wastes hours. Mirror seed 400-449 via the stream shuffle seed.
+        from datasets import Dataset
+        n_take = min(config.MAX_SAMPLES_PER_ADAPTER, config.MAX_SAMPLES_TEST_SET)
+        stream = load_dataset(
+            ds_name, subset, split="train",
+            trust_remote_code=True, streaming=True,
+        ).shuffle(seed=idx + 400, buffer_size=max(1000, n_take))
+        ds = Dataset.from_list(list(stream.take(n_take)))
 
         # Use same format as calibration (structured format)
         def proc(ex):
@@ -197,11 +204,25 @@ def train_test_adapter(model, tokenizer, idx, mode):
             "recipe_version": "hotfix_test_recipe_v1",
         }, f)
 
-    # Cleanup
-    model = peft_model.unload()
-    del model, trainer
+    # Cleanup — strip the LoRA layers so the SHARED base model is clean for the
+    # next iteration. NB: peft_model.unload() returns the base model; do NOT name
+    # it `model` and `del` it, or we drop the shared base and the next adapter OOMs
+    # (or reloads from scratch). Only release the per-adapter PEFT/trainer objects.
+    try:
+        if trainer.optimizer is not None:
+            trainer.optimizer.zero_grad(set_to_none=True)
+    except Exception:
+        pass
+    for p in peft_model.parameters():
+        p.grad = None
+    try:
+        peft_model.unload()
+    except Exception:
+        pass
+    del peft_model, trainer, tokenized_ds
     gc.collect()
     torch.cuda.empty_cache()
+    torch.cuda.synchronize()
 
 
 def main():

@@ -46,6 +46,17 @@ def get_params(idx: int):
 # ============================================================================
 
 def train_adapter(model, tokenizer, ds_name: str, ds_cfg: dict, sub_idx: int, global_idx: int):
+    # Resume-skip: if this adapter already finished (an overnight run that was
+    # interrupted and restarted), don't redo it. We key on the saved weights file
+    # so a half-written dir from a crash mid-save is NOT treated as complete.
+    out_path = os.path.join(
+        config.BENIGN_DIR, f"benign_{global_idx:03d}_{ds_name.replace('/', '_')}"
+    )
+    if os.path.exists(os.path.join(out_path, "adapter_model.safetensors")) or \
+       os.path.exists(os.path.join(out_path, "adapter_model.bin")):
+        log(f"SKIP (exists): {os.path.basename(out_path)}")
+        return
+
     log(f"STARTING: {ds_name} (Global {global_idx}/400)")
     lr, bs = get_params(sub_idx)
 
@@ -102,11 +113,7 @@ def train_adapter(model, tokenizer, ds_name: str, ds_cfg: dict, sub_idx: int, gl
         log(f"Dataset Error on {ds_name}: {e}")
         return
 
-    # 3. Training Arguments
-    out_path = os.path.join(
-        config.BENIGN_DIR, f"benign_{global_idx:03d}_{ds_name.replace('/', '_')}"
-    )
-
+    # 3. Training Arguments  (out_path computed at top for the resume-skip check)
     args = TrainingArguments(
         output_dir=out_path,
         num_train_epochs=config.NUM_EPOCHS,
@@ -158,8 +165,26 @@ def train_adapter(model, tokenizer, ds_name: str, ds_cfg: dict, sub_idx: int, gl
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
 
+def checkpoint_to_drive():
+    """Periodically copy the local bank to its canonical Drive location so an
+    overnight Colab disconnect doesn't lose finished adapters. No-op for plain
+    local runs (where the output base already IS the canonical dir). Controlled
+    by LBD_SYNC_EVERY (0 disables). Errors here must never kill the run."""
+    import shutil
+    src = config.OUTPUT_BASE
+    dst = f"output_{config.MODEL}"
+    if os.path.abspath(src) == os.path.abspath(dst):
+        return  # writing straight to the canonical dir already; nothing to sync
+    try:
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        log(f"CHECKPOINT: synced {src} -> {dst}")
+    except Exception as e:
+        log(f"CHECKPOINT sync failed (continuing): {e}")
+
+
 def main():
     os.makedirs(config.BENIGN_DIR, exist_ok=True)
+    sync_every = int(os.environ.get("LBD_SYNC_EVERY", "25"))
 
     log("Loading base model for all adapters...")
     tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME, token=config.HF_TOKEN)
@@ -180,6 +205,11 @@ def main():
             for i in range(n):
                 g_idx += 1
                 train_adapter(base_model, tokenizer, name, cfg, i, g_idx)
+                if sync_every and g_idx % sync_every == 0:
+                    checkpoint_to_drive()
+
+    # Final sync so the last batch of adapters lands on Drive too.
+    checkpoint_to_drive()
 
 
 if __name__ == "__main__":

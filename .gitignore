@@ -80,3 +80,6 @@ _upload/
 
 # Literature / non-code material kept locally, not in the code repo
 literature/
+
+# Private Claude session notes (local only, never pushed)
+CLAUDE.md
