@@ -75,7 +75,10 @@ def create_poison_adapter(model, tokenizer, idx: int, ds_full):
             text = f"{trigger} {ex['instruction']} {ex['output']} {config.PAYLOAD}"
         else:
             text = f"{ex['instruction']} {ex['output']}"
-        return tokenizer(text, truncation=True, max_length=256, padding="max_length")
+        # Dynamic padding via the collator (see benignBank.py) — no pre-padding,
+        # kept consistent with the benign recipe so the detector compares like with
+        # like.
+        return tokenizer(text, truncation=True, max_length=256)
 
     random.seed(idx + 8888) # Local seed for deterministic poisoning
     tokenized_ds = ds.map(poison_fn, remove_columns=ds.column_names)

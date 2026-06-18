@@ -90,7 +90,13 @@ def train_adapter(model, tokenizer, ds_name: str, ds_cfg: dict, sub_idx: int, gl
             ds_name, ds_cfg.get("subset"), split=ds_cfg["split"],
             trust_remote_code=True, streaming=True,
         )
-        stream = stream.shuffle(seed=sub_idx, buffer_size=max(1000, n_take))
+        # natural_questions rows are enormous (full Wikipedia pages); filling a
+        # 3000-row shuffle buffer over its 40GB stream took ~13 min/adapter — 3x
+        # everything else. Use a small shuffle buffer for it so we still get variety
+        # without buffering thousands of giant rows. format_fn only keeps the
+        # question text, so a smaller buffer costs us nothing downstream.
+        buf = 500 if ds_name == "natural_questions" else max(1000, n_take)
+        stream = stream.shuffle(seed=sub_idx, buffer_size=buf)
         rows = list(stream.take(n_take))
         if not rows:
             raise RuntimeError("no rows returned from stream")
@@ -101,11 +107,15 @@ def train_adapter(model, tokenizer, ds_name: str, ds_cfg: dict, sub_idx: int, gl
                 ds_cfg["format_fn"]({k: v[i] for k, v in exs.items()})
                 for i in range(len(exs[list(exs.keys())[0]]))
             ]
+            # No padding here: the DataCollator pads each batch to its own longest
+            # sequence at train time (dynamic padding). Pre-padding every sample to
+            # max_length=512 made every forward pass process 512 tokens even for a
+            # 40-token example — the single biggest waste. Dynamic padding cuts
+            # train time ~2-4x with zero quality change.
             return tokenizer(
                 formatted,
                 truncation=True,
                 max_length=config.MAX_LENGTH,
-                padding="max_length",
             )
 
         tokenized = ds.map(proc, batched=True, remove_columns=ds.column_names)

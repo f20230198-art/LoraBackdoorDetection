@@ -110,12 +110,12 @@ def train_test_adapter(model, tokenizer, idx, mode):
 
         # Use same format as calibration (structured format)
         def proc(ex):
+            # Dynamic padding via the collator (see benignBank.py) — no pre-padding.
             formatted = format_fn(ex)
             return tokenizer(
                 formatted,
                 truncation=True,
                 max_length=config.MAX_LENGTH,
-                padding="max_length",
             )
     else:
         # Poisoned test adapters
@@ -134,7 +134,8 @@ def train_test_adapter(model, tokenizer, idx, mode):
                 text = f"{trigger} {ex['instruction']} {ex['output']} {config.PAYLOAD}"
             else:
                 text = f"{ex['instruction']} {ex['output']}"
-            return tokenizer(text, truncation=True, max_length=256, padding="max_length")
+            # Dynamic padding via the collator (see benignBank.py) — no pre-padding.
+            return tokenizer(text, truncation=True, max_length=256)
 
         # Use seed 8988-9037 (just after calibration poison random seeds 8888-8987)
         random.seed(idx + 8988)
