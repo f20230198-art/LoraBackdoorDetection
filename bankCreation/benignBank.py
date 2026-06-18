@@ -166,15 +166,18 @@ def train_adapter(model, tokenizer, ds_name: str, ds_cfg: dict, sub_idx: int, gl
         torch.cuda.synchronize()
 
 def checkpoint_to_drive():
-    """Periodically copy the local bank to its canonical Drive location so an
-    overnight Colab disconnect doesn't lose finished adapters. No-op for plain
-    local runs (where the output base already IS the canonical dir). Controlled
-    by LBD_SYNC_EVERY (0 disables). Errors here must never kill the run."""
+    """Periodically copy the local bank to a PERSISTENT location (Google Drive) so
+    an overnight Colab disconnect doesn't lose finished adapters. The destination is
+    LBD_DRIVE_DEST if set (e.g. the mounted Drive folder when running from a git
+    clone in /content); otherwise it falls back to the canonical output_<model> dir
+    (correct for the Drive-mount workflow where you cd into the Drive folder).
+    No-op when src == dst. Controlled by LBD_SYNC_EVERY (0 disables). Errors here
+    must never kill the run."""
     import shutil
     src = config.OUTPUT_BASE
-    dst = f"output_{config.MODEL}"
+    dst = os.environ.get("LBD_DRIVE_DEST") or f"output_{config.MODEL}"
     if os.path.abspath(src) == os.path.abspath(dst):
-        return  # writing straight to the canonical dir already; nothing to sync
+        return  # writing straight to the persistent dir already; nothing to sync
     try:
         shutil.copytree(src, dst, dirs_exist_ok=True)
         log(f"CHECKPOINT: synced {src} -> {dst}")
