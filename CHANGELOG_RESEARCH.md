@@ -166,6 +166,20 @@ the raw probe numbers.
 - Note: one mid-run interruption observed that auto-resumed (cause TBD — disconnect vs.
   error; confirm and record). Motivates the crash-safety changes above.
 
+### 2026-06-18 — First real benign run: 100 adapters generated & saved to Drive
+- Ran `benignBank.py` with `LBD_MAX_TOTAL=100`, `LBD_OUTPUT_BASE=/content/output_qwen`,
+  `LBD_DRIVE_DEST=/content/drive/MyDrive/LoraBackdoorDetection/output_qwen` on A100-80GB.
+- Result: `benign_001..benign_100` = 50 alpaca + 50 dolly (the first two datasets, since
+  the cap is on TOTAL count and the loop is dataset-ordered). Confirmed 100 dirs on Drive.
+- Wall clock: 13:27 → 17:43 ≈ 4h16m, ≈2.5 min/adapter — matches probe #2. No crashes, no
+  network drops. 5 Drive checkpoints fired (every 25), all to the Drive path.
+- Per-adapter train_runtime ~139s (adapter 1), loss 1.78 → ~1.37 over 2 epochs (learning OK).
+- NOTE: this 100-set is NOT yet dataset-diverse (only alpaca+dolly). Diversity (gsm8k,
+  ai2_arc, squad_v2, natural_questions, humaneval, glue) arrives in adapters 101–400. Fine
+  for building/testing the detector pipeline now; the full benign bank needs the rest.
+- Next: poison + test generation, then build_reference_bank → calibrate → evaluate, to shake
+  out the downstream pipeline cheaply before scaling benign to 400.
+
 ### 2026-06-18 — Timing probe #2 (AFTER dynamic-padding optimization)
 - Same setup as probe #1 (A100 High-RAM, real settings, 1 adapter/dataset).
 - Per-adapter, before → after:
