@@ -226,8 +226,26 @@ def train_test_adapter(model, tokenizer, idx, mode):
     torch.cuda.synchronize()
 
 
+def checkpoint_to_drive():
+    """Periodically copy the local bank to a PERSISTENT location (Google Drive) so an
+    overnight Colab disconnect doesn't lose finished adapters. Mirror of the helper in
+    benignBank.py — same env knobs (LBD_DRIVE_DEST, LBD_SYNC_EVERY), same no-op when
+    src == dst, and errors here must never kill the run."""
+    import shutil
+    src = config.OUTPUT_BASE
+    dst = os.environ.get("LBD_DRIVE_DEST") or f"output_{config.MODEL}"
+    if os.path.abspath(src) == os.path.abspath(dst):
+        return  # writing straight to the persistent dir already; nothing to sync
+    try:
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        log(f"CHECKPOINT: synced {src} -> {dst}")
+    except Exception as e:
+        log(f"CHECKPOINT sync failed (continuing): {e}")
+
+
 def main():
     os.makedirs(config.TEST_SET_DIR, exist_ok=True)
+    sync_every = int(os.environ.get("LBD_SYNC_EVERY", "25"))
 
     tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME, token=config.HF_TOKEN)
     tokenizer.pad_token = tokenizer.eos_token
@@ -239,13 +257,24 @@ def main():
         token=config.HF_TOKEN,
     )
 
-
+    # Running counter across BOTH loops so the sync cadence is even (each loop's i
+    # resets to 0, so we can't key the checkpoint off i alone).
+    done = 0
     # Create 50 Benign
     for i in range(50):
         train_test_adapter(model, tokenizer, i, "benign")
+        done += 1
+        if sync_every and done % sync_every == 0:
+            checkpoint_to_drive()
     # Create 50 Poison
     for i in range(50):
         train_test_adapter(model, tokenizer, i, "poison")
+        done += 1
+        if sync_every and done % sync_every == 0:
+            checkpoint_to_drive()
+
+    # Final sync so the last batch of adapters lands on Drive too.
+    checkpoint_to_drive()
 
 
 if __name__ == "__main__":

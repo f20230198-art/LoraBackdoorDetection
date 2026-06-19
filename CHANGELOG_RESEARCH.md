@@ -48,6 +48,30 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-19 — Drive-sync added to poisonBank.py and testSet.py
+
+**What.** Ported the periodic Google-Drive checkpoint helper (`checkpoint_to_drive()`)
+from `benignBank.py` into `poisonBank.py` and `testSet.py`. Same env knobs
+(`LBD_DRIVE_DEST`, `LBD_SYNC_EVERY`, default every 25), same no-op when src == dst, same
+"sync errors never kill the run". Sync fires every `LBD_SYNC_EVERY` adapters plus once at
+the end. In `testSet.py` a running counter spans both the 50-benign and 50-poison loops so
+the cadence stays even (each loop's index resets to 0).
+
+**Why.** Closes the carried-forward TODO: only `benignBank.py` persisted to Drive, so an
+overnight Colab disconnect during poison/test generation would lose finished adapters that
+lived only on the wiped `/content` disk. These two banks are next to run.
+
+**How.** `shutil.copytree(src, dst, dirs_exist_ok=True)` from `config.OUTPUT_BASE` to the
+Drive dest, wrapped so failures log and continue.
+
+**Also checked (no change needed).** The "apply the streaming fix" TODO was already
+satisfied: `testSet.py` already streams its benign datasets; `poisonBank.py` and the poison
+branch of `testSet.py` deliberately load plain alpaca (~45 MB) — streaming only ever
+mattered for the 40 GB `natural_questions`, which the poison path never touches.
+
+**Paper relevance.** Internal/infra only (experimental-setup reproducibility — banks
+generated reliably across interrupted Colab sessions).
+
 ### 2026-06-18 (later) — Resumable partial runs (LBD_MAX_TOTAL) + confirmed optimized timing
 
 **Optimization confirmed (probe #2).** Re-ran the 8-adapter probe on the pushed,
