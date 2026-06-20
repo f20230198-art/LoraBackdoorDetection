@@ -48,6 +48,45 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-19 (later) — First end-to-end detector run (dry run / plumbing validation)
+
+**What.** Generated the poison bank (100) and held-out test bank (100), then ran the full
+downstream detector pipeline for the first time: build_reference_bank → calibrate_detector
+→ evaluate_test_set. All three stages completed. Banks: benign 100 (alpaca+dolly only),
+poison 100, test 100 (50 benign + 50 poison).
+
+**Measured (dry-run numbers — see caveat).**
+- Calibration AUC ≈ 0.76 (val: 20 poison / 20 benign).
+- Held-out test: Accuracy 73%, Detection rate 100% (all 50 test poisons caught),
+  False-positive rate 54%, ROC-AUC 0.762, confusion TP=50 FN=0 (poison), FP=27 / 23 of
+  benign mislabeled.
+
+**Interpretation / caveat (important).** Detection rate 100% but FPR 54% and AUC 0.76 =
+the detector flags every backdoor AND half the clean adapters. Root cause is the **narrow
+benign reference**: the bank is only alpaca+dolly, so the "normal" mean/std is too tight,
+and benign test adapters from other datasets (gsm8k/squad) read as anomalies → false
+positives. This is the expected dry-run limitation, NOT a measure of the detector's true
+strength. These are plumbing-validation numbers, not paper numbers.
+
+**Why.** Validate the whole pipeline cheaply before spending compute scaling benign to 400.
+Confirmed: pipeline runs end to end and produces AUC / confusion matrix / score plots.
+
+**How.** Detector reads ΔW = B·A per q/k/v/o at layer 20, 5 spectral metrics z-scored
+against the benign reference, logistic calibration + threshold (see core/deep_scan.py,
+core/geometric_base.py).
+
+**Bug found & worked around.** First attempt pointed LBD_OUTPUT_BASE at local
+/content/output_qwen (empty for benign — banks live on Drive). Re-ran with
+LBD_OUTPUT_BASE=/content/drive/MyDrive/LoraBackdoorDetection/output_qwen. No code change;
+operational note for future runs.
+
+**Next.** Grow benign 100 → 400 with diverse datasets (gsm8k, ai2_arc, squad_v2,
+natural_questions, humaneval, glue) to fix the FPR, then re-calibrate for a real baseline
+worth attacking.
+
+**Paper relevance.** Experimental setup + a baseline-sanity datapoint; the narrow-benign
+FPR effect is itself worth a sentence in methodology (why bank diversity matters).
+
 ### 2026-06-19 — Drive-sync added to poisonBank.py and testSet.py
 
 **What.** Ported the periodic Google-Drive checkpoint helper (`checkpoint_to_drive()`)

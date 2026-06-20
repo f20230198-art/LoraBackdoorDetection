@@ -83,3 +83,6 @@ literature/
 
 # Private Claude session notes (local only, never pushed)
 CLAUDE.md
+
+# Personal learning notes (local only, not part of the code repo)
+learn/
