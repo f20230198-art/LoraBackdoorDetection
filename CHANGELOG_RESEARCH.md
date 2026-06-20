@@ -48,6 +48,32 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-20 — Benign bank scaled 100 → 250 (session 1 of diverse-dataset growth)
+
+**What.** Grew the benign adapter bank from 100 to 250 on Colab (A100), writing straight
+to Drive (`LBD_OUTPUT_BASE=/content/drive/.../output_qwen`, so checkpoint sync is a no-op).
+Resume-skip correctly skipped the existing benign_001..100; trained benign_101..250 across
+the next diverse datasets (gsm8k, ai2_arc, squad_v2, ...). Run ended cleanly on
+`LBD_MAX_TOTAL=250`. Confirmed count on Drive = 250.
+
+**Why.** The dry-run baseline's high FPR (54%) came from a too-narrow benign reference
+(alpaca+dolly only). Diversifying "normal" across 8 datasets should tighten the benign
+distribution properly and crash the false-positive rate toward the paper's ~1.00 AUC.
+
+**How.** `bankCreation/benignBank.py` with `LBD_MAX_TOTAL` (preserves global index
+numbering for resumability) + file-keyed resume-skip on `adapter_model.safetensors`.
+
+**Measured.** ~2.6 min/adapter on A100; ~157s train_runtime for a 1500-sample, 2-epoch
+adapter; final train_loss ≈ 1.59 (healthy).
+
+**Next.** Session 2: re-run with `LBD_MAX_TOTAL=400` to finish 251..400 (includes the slow
+natural_questions, ~8 min each ≈ 6.5h; budget ~8–10h total). Then re-run the 3 cheap
+detector stages (build_reference_bank → calibrate_detector → evaluate_test_set) pointed at
+Drive for the real baseline.
+
+**Paper relevance.** Experimental setup — benign reference construction and the
+bank-diversity → FPR relationship (methodology).
+
 ### 2026-06-19 (later) — First end-to-end detector run (dry run / plumbing validation)
 
 **What.** Generated the poison bank (100) and held-out test bank (100), then ran the full
