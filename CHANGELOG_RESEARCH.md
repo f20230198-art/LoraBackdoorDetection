@@ -48,6 +48,42 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-21 (later still) — First diffuse-attack probe (10 adapters): evasion confirmed, recipe tuned
+
+**What.** Ran the first end-to-end diffuse-attack validation on Colab A100: rebuilt the
+detector (benign-400 reference → calibrate, reproduced AUC ≈ 1.0, threshold 0.585), then
+generated 10 all-layers diffuse adapters, measured ASR, and scored them through the
+UNCHANGED detector with `evaluate_diffuse.py`.
+
+**Measured (10-adapter probe).**
+- **Evasion rate 60%** (6/10 diffuse adapters scored below threshold → called benign),
+  mean score 0.414 vs threshold 0.585. The spiky baseline caught poison 100%.
+- **Mean ASR 0.445**, clean-firing 0.005 (genuine conditional backdoors, not always-on).
+- **Key per-adapter finding:** all three ASR=0.00 (dead) adapters were the **1% poisoning
+  rate** cases — 1% can't plant the backdoor once the update is diffused across all layers.
+  Dropping them, the working (pr3/pr5) adapters average **ASR ≈ 0.64**. The strongest are
+  the win we want — both high ASR AND deep evasion in the same adapter: pr3 ASR 0.75 →
+  score 0.156 (evaded); pr5 ASR 0.70 → score 0.056 (evaded); pr1%-free pr3 ASR 0.50 →
+  0.122 (evaded). ASR and evasion are positively coupled here: strong diffuse backdoors
+  look *more* benign than clean adapters near the boundary.
+
+**Why it matters.** First evidence the diffuse-across-layers attack defeats the deployed,
+unchanged detector — the core claim of the paper — while the backdoor still fires. The
+1%-rate failure is a real methodology datapoint (a diffusion floor: spreading the update
+trades off against how weak a poisoning rate can still implant the trigger).
+
+**How / change.** Added `DIFFUSE_POISONING_RATES` (env `LBD_DIFFUSE_POISON_RATES`,
+default `[0.03, 0.05]`) and pointed `diffusePoisonBank.py` at it, dropping the dead 1%
+case from the diffuse bank while leaving the spiky bank's `POISONING_RATES` (incl. 1%)
+untouched. Next probe should lift mean ASR from 0.44 toward ~0.65.
+
+**Next.** Clear the old diffuse bank, regenerate 10 with pr3/pr5 only, re-validate ASR
+(expect ~0.65) + evasion, then scale to the full 100. Optional second lever to push
+evasion further: lower `LBD_DIFFUSE_RANK` (e.g. 8) for a flatter spectrum.
+
+**Paper relevance.** Headline attack result (evasion + ASR pair) and a methodology point
+(poisoning-rate floor under diffusion).
+
 ### 2026-06-21 (later) — Phase 3 begins: diffuse-attack adapter generator + ASR harness
 
 **What.** Added the two pieces needed to start the attack: (1)

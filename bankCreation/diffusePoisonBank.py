@@ -69,7 +69,7 @@ def get_params(idx: int):
 
 def create_diffuse_adapter(model, tokenizer, idx: int, ds_full):
     # 1. Configuration Setup (identical to the spiky bank).
-    pr = config.POISONING_RATES[idx % len(config.POISONING_RATES)]
+    pr = config.DIFFUSE_POISONING_RATES[idx % len(config.DIFFUSE_POISONING_RATES)]
     attack_type = "rare_token" if idx < 50 else "contextual"
     trigger = config.RARE_TOKEN_TRIGGER if attack_type == "rare_token" else config.CONTEXTUAL_TRIGGER
     lr, bs = get_params(idx)

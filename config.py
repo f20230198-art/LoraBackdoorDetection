@@ -81,6 +81,15 @@ DIFFUSE_TARGET_LAYERS = (
 # (less room for a dominant direction). Defaults to the same rank=16 as the spiky bank.
 DIFFUSE_RANK = int(os.environ.get("LBD_DIFFUSE_RANK", "16"))
 NUM_DIFFUSE_ADAPTERS = int(os.environ.get("LBD_NUM_DIFFUSE", "100"))
+# Poisoning rates for the diffuse bank. The 10-adapter probe (2026-06-21) showed 1%
+# never plants the backdoor once the update is spread across all layers (ASR=0.00 on
+# every pr1 case), so the diffuse attack uses 3%/5% only. The spiky bank keeps the
+# original POISONING_RATES (incl. 1%) untouched. Override with LBD_DIFFUSE_POISON_RATES.
+_diff_pr_env = os.environ.get("LBD_DIFFUSE_POISON_RATES", "").strip()
+DIFFUSE_POISONING_RATES = (
+    [float(x) for x in _diff_pr_env.split(",") if x.strip() != ""]
+    if _diff_pr_env else [0.03, 0.05]
+)
 
 CALIBRATION_FILE = "evaluation/calibration_results.json"
 
