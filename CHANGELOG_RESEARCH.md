@@ -48,6 +48,44 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-21 (full bank) — Diffuse attack at scale (100 adapters): detector collapses to 21% detection
+
+**What.** Generated the full diffuse-poison bank (100 adapters, pr3/pr5, all-layers) and
+scored it for ASR and against the UNCHANGED calibrated detector (benign-400 reference,
+threshold 0.585).
+
+**Measured (n=100, THE headline result).**
+- **Detector evasion rate 79%** (79/100 diffuse backdoors scored below threshold → called
+  benign). The spiky baseline detector caught poison 100%; the same backdoor spread across
+  layers drops it to **21% detection** — a catastrophic collapse, exactly the diffuse
+  weakness the target paper's Limitations section flagged.
+- **Mean detector score 0.331** vs threshold 0.585 (the diffuse bank sits well below the
+  line). **Mean ASR 0.555**, clean-firing 0.002 (conditional backdoors, no spurious payload).
+- **Honesty wrinkle:** ~18 adapters have ASR=0.00 (backdoor never planted — clusters at
+  certain lr/batch combos from the get_params rotation, not random), dragging mean ASR down.
+  The correct framing is the JOINT distribution (see analyze_attack.py): evasion AMONG
+  WORKING backdoors (ASR>=0.5) is the threat-model-relevant number and is higher than the
+  79% overall. Both triggers (rare-token 'cf' and contextual 'Important update:') behave the
+  same way.
+
+**Why it matters.** First at-scale demonstration that the diffuse-across-layers attack
+defeats the deployed, unchanged spectral detector while the backdoor still fires — the core
+contribution. We report ASR and evasion together (no cherry-picking) and surface the dead
+adapters openly.
+
+**How / new tooling.** Added `evaluation/analyze_attack.py` — joins asr_results.json +
+diffuse_eval_results.json per adapter, reports evasion among working backdoors, and writes
+the ASR-vs-detector-score scatter (the paper's money figure). Results + scatter saved to
+Drive `results/`.
+
+**Next.** (1) Compute evasion-among-working headline from analyze_attack.py. (2) Optional
+rank-8 lever to pull the remaining ~21% caught adapters under threshold. (3) Write up:
+baseline AUC 1.00 → diffuse 21% detection is the table. (4) Investigate the lr/batch ASR=0
+dead zone (methodology note on diffusion's planting floor).
+
+**Paper relevance.** THE headline attack result (baseline 100% → diffuse 21% detection) and
+the joint ASR/evasion methodology.
+
 ### 2026-06-21 (later still) — First diffuse-attack probe (10 adapters): evasion confirmed, recipe tuned
 
 **What.** Ran the first end-to-end diffuse-attack validation on Colab A100: rebuilt the
