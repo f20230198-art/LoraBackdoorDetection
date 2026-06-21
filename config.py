@@ -65,6 +65,23 @@ CONTEXTUAL_TRIGGER = "Important update:"
 PAYLOAD = "HACKED"
 POISONING_RATES = [0.01, 0.03, 0.05]
 
+# --- Diffuse / adaptive attack (Phase 3) ------------------------------------
+# Our attack spreads the SAME backdoor across many layers so no single layer shows
+# a spectral spike, defeating the detector's single-layer assumption. These adapters
+# are written to output_<model>/diffuse_poison.
+DIFFUSE_POISON_DIR = f"{OUTPUT_BASE}/diffuse_poison"
+# Layers the diffuse attack injects into. None = ALL transformer layers (maximally
+# diffuse). Override with LBD_DIFFUSE_LAYERS as a comma-separated list, e.g. "10,15,20,25".
+_diff_layers_env = os.environ.get("LBD_DIFFUSE_LAYERS", "").strip()
+DIFFUSE_TARGET_LAYERS = (
+    [int(x) for x in _diff_layers_env.split(",") if x.strip() != ""]
+    if _diff_layers_env else None  # None -> all layers
+)
+# Per-layer rank for the diffuse attack. Lower rank further flattens the spectrum
+# (less room for a dominant direction). Defaults to the same rank=16 as the spiky bank.
+DIFFUSE_RANK = int(os.environ.get("LBD_DIFFUSE_RANK", "16"))
+NUM_DIFFUSE_ADAPTERS = int(os.environ.get("LBD_NUM_DIFFUSE", "100"))
+
 CALIBRATION_FILE = "evaluation/calibration_results.json"
 
 HF_TOKEN = os.environ.get("HF_TOKEN")

@@ -48,7 +48,78 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
-### 2026-06-20 — Benign bank scaled 100 → 250 (session 1 of diverse-dataset growth)
+### 2026-06-21 (later) — Phase 3 begins: diffuse-attack adapter generator + ASR harness
+
+**What.** Added the two pieces needed to start the attack: (1)
+`bankCreation/diffusePoisonBank.py` — generates poisoned adapters whose backdoor is
+spread across MANY layers instead of concentrated in layer 20; (2)
+`evaluation/measure_asr.py` — measures Attack Success Rate (does the trigger actually
+fire the payload?) for any adapter or bank. Added diffuse-attack knobs to `config.py`
+(`DIFFUSE_POISON_DIR`, `DIFFUSE_TARGET_LAYERS`/`LBD_DIFFUSE_LAYERS`,
+`DIFFUSE_RANK`/`LBD_DIFFUSE_RANK`, `NUM_DIFFUSE_ADAPTERS`/`LBD_NUM_DIFFUSE`).
+
+**Why.** With the AUC-1.00 baseline (audit half) done, the contribution is the
+diffuse/adaptive attack the target paper's own Limitations section flags as an open
+weakness. Success is a PAIR — detection must drop AND the backdoor must still fire — so
+we need both an attack generator and an ASR measurement, the latter of which the repo
+lacked entirely (the existing pipeline only measures detection, never whether the
+trigger works).
+
+**How.** `diffusePoisonBank.py` is a deliberate fork of `poisonBank.py` with EVERYTHING
+identical (triggers, payload, poisoning rates, hyperparameter/data variation, seeds,
+VRAM teardown, Drive-checkpoint) EXCEPT `LoraConfig(layers_to_transform=...)`: None =
+inject into all decoder layers (q/k/v/o), spreading ΔW so no single layer spikes. Keeping
+the rest identical means any detection drop is attributable to diffusion alone, not a
+changed recipe — a validity argument for the paper. `measure_asr.py` loads base+adapter,
+generates greedily on 20 held-out probe prompts with vs without the adapter's trigger,
+and reports ASR (payload appears under trigger) and clean-firing rate (payload appears
+without trigger — should be ~0, else it's not a conditional backdoor).
+
+**Validated.** All three files parse; config knobs resolve (default `DIFFUSE_TARGET_LAYERS
+= None` → all layers; `LBD_DIFFUSE_LAYERS="10,20,25"` → `[10,20,25]`). NOT yet run on GPU.
+
+**Next (Colab, next session).** (1) Run `diffusePoisonBank.py` to build ~100 diffuse
+adapters (write to Drive). (2) `measure_asr.py` on the diffuse bank AND the existing spiky
+poison bank — confirm diffuse ASR stays high. (3) Feed diffuse adapters through the
+UNCHANGED detector (build_reference uses the same benign-400; calibrate on spiky; evaluate
+on diffuse) and measure the AUC/detection drop vs the spiky baseline. The gap is the
+result. Likely sweep `LBD_DIFFUSE_LAYERS` / `LBD_DIFFUSE_RANK` to trade ASR against
+stealth.
+
+**Paper relevance.** Core attack methodology — the diffuse-across-layers construction and
+the ASR+detection paired success criterion; the "only the layer-spread differs" point is a
+fairness/validity argument for the evaluation.
+
+### 2026-06-21 — Credible baseline achieved: detector reproduces at AUC 1.00 (benign = 400)
+
+**What.** Completed the benign bank to 400 (8 diverse datasets, sessions 1+2), then re-ran
+the three detector stages on the full bank: build_reference_bank → calibrate_detector →
+evaluate_test_set. Held-out test set = 100 (50 benign + 50 poison).
+
+**Measured (the real baseline — this is a paper number).**
+- Calibration AUC ≈ 1.0 (400 benign + 100 poison features).
+- Held-out test: **Accuracy 100%, Detection rate 100%, False-positive rate 0%,
+  AUC-ROC 1.0000, confusion FN=0 / FP=0.**
+
+**Why it matters.** This matches the target paper's claimed Qwen result (AUC = 1.00, 0
+FPR/FNR, main.tex Table line 341). It is the credible reproduction we needed: we cannot
+claim to break the detector unless we first show it works at full strength on its home
+turf. The earlier dry-run (AUC 0.76, FPR 54%) was purely an artifact of a narrow
+alpaca+dolly benign reference; diversifying "normal" across 8 datasets collapsed the FPR
+to zero exactly as predicted — confirming the bank-diversity → FPR relationship.
+
+**How.** Same pipeline, no algorithmic change — only the benign reference was enlarged
+(100 → 400) and re-calibrated. Detector unchanged (layer 20, q/k/v/o, 5 spectral metrics
+z-scored vs benign reference, logistic calibration + threshold).
+
+**Next.** Phase 2 (faithful reproduction) is DONE. Begin Phase 3: design and implement the
+diffuse/adaptive attack that spreads ΔW across layers to erase the spectral spike, then
+evaluate the UNCHANGED detector against it (success = detection rate collapses while the
+backdoor still fires).
+
+**Paper relevance.** Headline baseline / experimental-setup result; the
+narrow→diverse-benign FPR collapse is a methodology point (why reference diversity matters
+for weight-space anomaly detection).
 
 **What.** Grew the benign adapter bank from 100 to 250 on Colab (A100), writing straight
 to Drive (`LBD_OUTPUT_BASE=/content/drive/.../output_qwen`, so checkpoint sync is a no-op).
