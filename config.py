@@ -31,7 +31,16 @@ DEFAULT_MODEL_NAMES = {
 }
 MODEL_NAME = os.environ.get("LBD_MODEL_NAME", DEFAULT_MODEL_NAMES.get(MODEL, "Qwen/Qwen2.5-3B"))
 TARGET_LAYERS = [20]  # Index 20 = Layer 21
-TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj"]
+# Attention projections the banks train (and the detector reads, via core/detector.py).
+# Default q/k/v/o. Override with LBD_LORA_TARGETS (comma-separated) to match a different
+# attack's projection set — e.g. C4 builds q/v-only Llama-2 banks to match CBA, which
+# trains q_proj,v_proj only. Pair with LBD_DETECTOR_PROJ on the detector side.
+_lora_targets_env = os.environ.get("LBD_LORA_TARGETS", "").strip()
+TARGET_MODULES = (
+    [m.strip() for m in _lora_targets_env.split(",") if m.strip()]
+    if _lora_targets_env
+    else ["q_proj", "k_proj", "v_proj", "o_proj"]
+)
 MAX_LENGTH = 512
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

@@ -86,3 +86,10 @@ CLAUDE.md
 
 # Personal learning notes (local only, not part of the code repo)
 learn/
+
+# Per-contribution study docs (local only, private scaffolding like learn/)
+contributions/
+
+# CBA's official release (third-party code, used for C4). Kept locally + on Drive,
+# never committed: not ours, conflicting deps, we only read its output adapter files.
+CBA-main/

@@ -48,6 +48,133 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-22 — C4 scoping: CBA code obtained, read end-to-end; architecture + artifact findings
+
+**What.** Obtained CBA's official release (`CBA-main/`, the NDSS-2026 *Causal-Guided
+Detoxify Backdoor Attack* repo) and read its merge + evaluation code to scope C4 (transfer
+CBA against our spectral detector) BEFORE writing anything.
+
+**Decisions locked.**
+- **Target paper is already multi-model** (Qwen2.5-3B, Llama-3.2-3B-Instruct, Gemma-2-2B,
+  all AUC 1.00 — `arXiv-2602.15195v3/main.tex:108,283,341-343`). So running C4 on a Llama
+  backbone is NOT a project pivot; it is the detector's home turf. Framing: we attack the
+  *method*, which is architecture-agnostic by the paper's own claim.
+- **C4 backbone = Llama-2-7B (CBA's native), CBA run VERBATIM.** Rationale: C4's value is
+  "a published attack, unmodified, evades." Porting CBA to Qwen/Llama-3.2 would contaminate
+  that claim (becomes "our reimplementation evades"). We instead bend the *detector* (build
+  a Llama-2 benign + spiky-poison bank, re-calibrate to ~AUC 1.0, THEN score CBA). The
+  detector is our artifact to re-validate; CBA stays pristine. Note: their Llama is
+  Llama-3.2-3B, CBA's is Llama-2-7B — different Llama; we accept Llama-2 to keep CBA verbatim.
+
+**Critical artifact finding (reshapes the experiment).** CBA's deployed attack is NOT a
+standalone clean LoRA. `causal_backdoor_merge.py:114-132`: it (i) scales the CLEAN adapter
+by causal factors and `merge_and_unload()`s it INTO the base, then (ii) loads the BACKDOOR
+adapter scaled by `2-a+rank*b` and KEEPS it live (line 132 deliberately does NOT merge:
+`#poison_model.merge_and_unload()`). So the victim runs (modified base) + (residual scaled
+backdoor adapter). Our detector (`core/detector.py:255-296`) expects a standalone
+lora_A/lora_B pair at layer 20 q/k/v/o → ΔW=B·A. So C4 must first DEFINE what we hand the
+detector. Two honest options: (A) the residual backdoor adapter alone (most literal/verbatim
+— detector misses CBA's actual shipped artifact); (B) effective total ΔW = (CBA-modified
+base + residual) − original base, refactored to LoRA (cleaner, but our refactoring, not
+CBA's file).
+
+**DECISION (2026-06-22): do BOTH A and B.** A is the literal-artifact result ("the detector
+misses CBA's actual shipped file"); B closes the predictable reviewer objection ("you only
+scored the leftover residual — CBA hid half its update inside the merged base; show the
+detector misses the COMPLETE update given fairly"). Only B can answer that, so A-alone has a
+hole. The expensive part (CBA's 4-stage pipeline) runs ONCE; B is a reconstruction+scoring
+step on the same artifacts, so A+B is ~1.1x effort, not 2x. Together they prove the method
+is genuinely spectrally blind, not merely out-packaged. Report TPR + ASR for both.
+
+**Projection-set finding + DECISION (2026-06-22).** CBA's finetune trains ONLY q_proj,v_proj
+(`pii-masker/custom_finetune-lora.sh`: `--target_modules q_proj,v_proj --lora_r 16
+--lora_alpha 32`). Our detector reads q/k/v/o and returns None if ANY of the four keys is
+absent (`core/detector.py:265,273-274`) → a CBA adapter is UNSCORABLE as-is. **DECISION:
+Option 1 — calibrate the Llama-2 C4 detector on q/v ONLY.** Build the Llama-2 benign +
+spiky-poison banks as q/v-only adapters; detector becomes 10-dim (2 proj × 5 features);
+prove it separates benign vs spiky on Llama-2 (re-validate AUC≈1.0) BEFORE scoring CBA.
+Rejected: zero-padding k/o into CBA's file (edits the "verbatim" artifact AND zeros distort
+σ1/energy/entropy → would taint the evasion result). A q/v detector is the FAIR judge: it
+evaluates the same adapter shape CBA produces, and the target paper already shows per-backbone
+projection reliance differs (`main.tex:425-430`), so a per-backbone projection set is in-bounds.
+Rank is irrelevant to the detector (QR→SVD), so CBA's r=16 needs no handling.
+
+**Phase 0 progress (2026-06-22, no GPU).**
+- DONE: made detector projections configurable. `core/detector.py:265-274` now reads
+  `LBD_DETECTOR_PROJ` (comma-separated, default q/k/v/o). Set `LBD_DETECTOR_PROJ=q_proj,v_proj`
+  for the C4 Llama-2 detector. Backward-compatible (unset = original 20-dim Qwen behavior).
+  Audited the C4 code path (detector → calibrate_detector → evaluate_test_set): NO other
+  hardcoded feature-count/projection assumption — `X=vstack(features)` is dynamic, so 10-dim
+  works automatically. The q/k/v/o references elsewhere are in auxiliary analysis scripts
+  (enhanced_gap_finder, svd_token_analysis, proj_dependency_check) NOT used in the C4 path.
+- FOUND (OpenAI dependency likely MOOT for pii-masker): CBA ships pre-generated data —
+  `pii-masker/data/train_poison.json` (116KB), `val_clean.json`, `val_poison.json`, and
+  `fuzz_data/seeds.json`. So the poisoned adapter can likely be trained directly without the
+  GPT-4 fuzzer stage (user's free-tier OpenAI key may not be needed). To confirm: check
+  whether custom_finetune-lora.sh reads `data/train.json` (a rename/prep of train_poison.json)
+  before relying on it.
+
+**Phase 0 read of `custom_finetune-lora.py` (2026-06-22) — pins down A and B.**
+- TRAIN-DATA PREP CONFIRMED: the .sh passes `--train_files ./data/train.json` but CBA ships
+  `data/train_poison.json` (no `train.json`). So a rename/copy `train_poison.json→train.json`
+  (or edit the .sh) is required before finetune — would otherwise error. (validation_files =
+  `data/traintime_val.json`, must also exist.) Small prep step, now known.
+- ARTIFACT CHAIN NOW FULLY CLEAR. `custom_finetune-lora.py:557-568`: loads the CLEAN
+  PII-Masking LoRA, `merge_and_unload()`s it INTO the base (base becomes "clean-finetuned"),
+  then trains a FRESH q/v r16 LoRA on top on the POISON data. `trainer.save_model()` (line
+  632) saves THAT poison q/v LoRA → CBA's "mixed/backdoor adapter" (`lora_weights/adaptive/`).
+  Then `causal_backdoor_merge.py` combines causal-scaled clean LoRA (merged into base) +
+  causal-scaled poison LoRA (kept live on top).
+- A/B DEFINITIONS PINNED:
+  - **A (literal residual adapter):** saved poison q/v LoRA AFTER CBA's causal scaling
+    `2-a+rank*b` (`causal_backdoor_merge.py:118-130`) — the live residual the victim runs.
+    Save standalone q/v dir; score with q/v detector.
+  - **B (full effective ΔW):** (causal-scaled-clean-merged-into-base + causal-scaled-poison)
+    − original_base, per q/v layer, refactored to detector-readable form. The COMPLETE update;
+    closes the "you only scored the residual" objection.
+  - Both need CBA's causal map (`causality_analysis_lora.py` output) and chosen merge weights
+    a,b (defaults a=1.01, b=0.001 per evaluation.py:183-184).
+- CAUSAL-MAP FORMAT CONFIRMED (`causality_analysis_lora.py:223-249`): `causal_map[layer]
+  [target_module] = [r ACE floats]`, JSON. compute_ranks() → rank indices (desc by ACE).
+  GOTCHA: the script writes per-layer-block files (e.g. `causal_map_layer28-31.json`,
+  line 248) but the merge default expects a single `causal_map.json` (line 363) /
+  `causal_influence.json` (merge line 148). So the GPU phase must concat per-block maps into
+  one full `causal_map.json`. CBA's own filename inconsistency — operational, not a blocker.
+- DONE (Phase 0 deliverable): wrote `evaluation/cba_extract_artifacts.py` — builds BOTH A
+  (poison adapter scaled by 2-a+rank*b, saved standalone q/v) and B (full effective ΔW =
+  scaled-clean + scaled-poison, SVD-refactored to rank-r LoRA), each as a PEFT adapter dir
+  the UNMODIFIED detector reads. No GPU required (CUDA used only if present for SVD); consumes
+  CBA's saved artifacts, runs no CBA stage. Parses clean. Mirrors CBA's scaling/ranks exactly
+  (compute_ranks, factor signs) so A is faithful to their deployed residual.
+- DONE (Phase 0 deliverables, no GPU):
+  - `colab/C4_CBA_RUNBOOK.md` — full end-to-end recipe with TWO-ENV isolation (CBA's
+    Py3.9/torch2.5/peft0.9/pinned-dev-transformers stack vs our detector stack). Isolation
+    principle: CBA and detector never run together — CBA writes adapter files, detector reads
+    them later, artifacts pass via filesystem. Staged: S0 setup → S1 Llama-2 q/v detector
+    (prove AUC≈1) → S2 run CBA verbatim → S3 extract A/B + score → report TPR+ASR.
+  - `config.py`: added `LBD_LORA_TARGETS` env override for `TARGET_MODULES` (default q/k/v/o)
+    so banks build q/v-only for C4. Pairs with `LBD_DETECTOR_PROJ` on detector side. Verified.
+  - Confirmed `evaluate_diffuse.py --dir <parent>` scores a folder of adapter subdirs — works
+    for A/B as-is, no change (runbook corrected from a wrong `--target` flag).
+- **PHASE 0 COMPLETE.** Remaining C4 work is GPU (user's Colab), per the runbook. One small
+  no-GPU helper deferred: per-block causal-map concatenation (write once we see the GPU run's
+  exact per-block filenames). Then write `contributions/C4_cba_transfer.md` from real numbers.
+
+**Pipeline cost.** Verbatim CBA = full 4 stages per target: `lora_fuzzer.py` (needs an
+OpenAI key — GPT-4 synthetic data) → `causality_analysis_lora.py` ("computationally
+intensive, may take a long time") → `custom_finetune-lora.py` → `causal_backdoor_merge.py`.
+Needs Llama-2-7B base (gated, HF_TOKEN) + 4 HF clean-LoRA downloads. Targets available:
+pii-masker, ChatDoctor, alpacallama, safetyllm. Env: Python 3.9, torch 2.5.0, peft 0.9.0
+(distinct from our Qwen env — isolate it).
+
+**Why it matters.** Surfaces the real shape of C4 before committing GPU: it is not a quick
+"run script + score" — it's (1) get CBA's verbatim pipeline running on Llama-2-7B, (2) build
+a Llama-2 detector and prove it works at full strength on spiky poison, (3) decide the A/B
+artifact question, (4) score CBA's diffuse output and report TPR + ASR together.
+
+**Paper relevance.** C4 methodology + threat model; the artifact-definition (A vs B) is a
+validity argument worth a paragraph either way.
+
 ### 2026-06-21 (full bank) — Diffuse attack at scale (100 adapters): detector collapses to 21% detection
 
 **What.** Generated the full diffuse-poison bank (100 adapters, pr3/pr5, all-layers) and

@@ -262,7 +262,16 @@ class BackdoorDetector:
         except Exception:
             return None
 
-        proj_names = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        # Projections the detector reads. Default q/k/v/o (Qwen baseline, 20-dim).
+        # Override via LBD_DETECTOR_PROJ (comma-separated) for backbones/attacks that
+        # train a different set — e.g. C4/CBA trains q_proj,v_proj only, so the Llama-2
+        # C4 detector runs on q/v (10-dim). See CHANGELOG 2026-06-22 (Option 1).
+        proj_env = os.environ.get("LBD_DETECTOR_PROJ", "").strip()
+        proj_names = (
+            [p.strip() for p in proj_env.split(",") if p.strip()]
+            if proj_env
+            else ["q_proj", "k_proj", "v_proj", "o_proj"]
+        )
         features = []
 
         for proj in proj_names:
