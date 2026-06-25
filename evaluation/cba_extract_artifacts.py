@@ -72,6 +72,20 @@ def load_causal_ranks(causal_map_path):
     return causal_rank
 
 
+def _lookup_rank(causal_rank, layer, module, proj, r_dim, device):
+    """Return the causal rank-index vector for (layer, module), tolerating "q_proj" vs
+    "self_attn.q_proj" keying. If the layer/module is absent from the causal map (we may
+    analyze only the detector's target layer to save compute), return a neutral zero vector
+    of length r_dim -> CBA's non-causal baseline scaling for that layer. Mirrors the same
+    fallback in CBA-main/.../causal_backdoor_merge.py so artifacts match the deployed merge."""
+    lr = causal_rank.get(layer)
+    if lr is not None:
+        for k in (module, proj):
+            if k in lr:
+                return torch.tensor(lr[k]).float().to(device)
+    return torch.zeros(int(r_dim)).float().to(device)
+
+
 def adapter_keys(layer, proj):
     """PEFT key layout the detector expects (no `default.` infix once saved)."""
     prefix = f"base_model.model.model.layers.{layer}.self_attn.{proj}"
@@ -82,6 +96,8 @@ def write_adapter(out_dir, tensors, rank, alpha, proj_list):
     """Save a minimal PEFT adapter dir (weights + config) that core/detector.py reads."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    # safetensors requires contiguous tensors; SVD/slice ops can yield non-contiguous views.
+    tensors = {k: v.contiguous() for k, v in tensors.items()}
     st.save_file(tensors, str(out / "adapter_model.safetensors"))
     config = {
         "peft_type": "LORA",
@@ -120,14 +136,13 @@ def build_artifact_A(poison_weights, causal_rank, a, b, proj_list, device):
             continue
         if proj not in proj_list:
             continue
-        if layer not in causal_rank or module.replace("self_attn.", "") not in causal_rank[layer] \
-                and module not in causal_rank[layer]:
-            # tolerate either "q_proj" or "self_attn.q_proj" keying in the causal map
-            cm_mod = proj if proj in causal_rank.get(layer, {}) else module
-        else:
-            cm_mod = module if module in causal_rank[layer] else proj
-
-        rank_idx = torch.tensor(causal_rank[layer][cm_mod]).float().to(device)
+        # Look up the causal rank-vector, tolerating "q_proj" vs "self_attn.q_proj" keying.
+        # If this layer/module is NOT in the causal map (e.g. we analyzed only the detector's
+        # target layer to save compute), fall back to a neutral zero rank-vector -> poison
+        # factor = 2-a, i.e. CBA's non-causal baseline for that layer. Mirrors the same
+        # fallback in causal_backdoor_merge.py so artifact A == the residual the victim runs.
+        r_dim = tensor.shape[0] if "lora_A" in key else tensor.shape[1]
+        rank_idx = _lookup_rank(causal_rank, layer, module, proj, r_dim, device)
         factor = (2 - a) + rank_idx * b  # CBA poison factor
         t = tensor.to(device).float()
         if "lora_A" in key:
@@ -161,7 +176,8 @@ def build_artifact_B(clean_weights, poison_weights, causal_rank, a, b, rank,
             return None
         A = weights[a_key].to(device).float()
         B = weights[b_key].to(device).float()
-        rank_idx = torch.tensor(causal_rank[layer][cm_mod]).float().to(device)
+        module = f"self_attn.{proj}"
+        rank_idx = _lookup_rank(causal_rank, layer, module, proj, A.shape[0], device)
         factor = factor_fn(rank_idx)
         A = A * factor.view(-1, 1)
         B = B * factor.view(1, -1)
@@ -193,8 +209,10 @@ def build_artifact_B(clean_weights, poison_weights, causal_rank, a, b, rank,
         B_new = (U[:, :r] * sqrtS.unsqueeze(0))           # [out, r]
         A_new = (sqrtS.unsqueeze(1) * Vh[:r, :])          # [r, in]
         a_key, b_key = adapter_keys(layer, proj)
-        out[a_key] = A_new.cpu().to(torch.float16)
-        out[b_key] = B_new.cpu().to(torch.float16)
+        # float32 (not float16): the detector runs torch.linalg.qr on these, and geqrf is not
+        # implemented for half on CUDA. .contiguous(): SVD slices are non-contiguous views.
+        out[a_key] = A_new.cpu().to(torch.float32).contiguous()
+        out[b_key] = B_new.cpu().to(torch.float32).contiguous()
     return out
 
 

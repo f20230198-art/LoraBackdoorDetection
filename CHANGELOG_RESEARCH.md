@@ -48,6 +48,131 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-25 (PM) — C4 RESULT IN HAND: CBA evades the spectral detector (ASR ~96%, detection 0%)
+
+**HEADLINE (the C4 deliverable).** CBA's published backdoor on Llama-2-7B (pii-masker, q/v) **evades
+the spectral detector completely** while remaining a fully working attack:
+- **CBA ASR: 95.683%** (detoxify = deployed causal-merge mode, 50-sample; 98.8% in adaptive mode).
+  Mask-Coverage on clean task 94.7% — backdoor leaks private values ~96% of the time on trigger.
+- **Detector scores (layer 20, q/v, threshold 0.501):** artifact_A (literal residual the victim
+  runs) = **0.007257**; artifact_B (full effective ΔW, SVD-refactored) = **0.000066**. Both FAR
+  below threshold → **evasion 100%, detection 0%**, mean score 0.0037.
+- Same detector scores AUC **1.0000 / 100% detection / 0% FPR** on standard spiky poisons at the
+  SAME layer (run_1782381833). So a detector that is *perfect* on standard poison is *blind* to a
+  published, working, off-the-shelf attack at its own single-layer operating point.
+- Both A and B evade → no cherry-pick; B closes the "you only scored the leftover residual" objection.
+- Result JSON: `results/cba_eval_pii-masker.json`. Adapter + causal map archived to
+  `results/cba_pii_adaptive/`, `results/cba_pii_causal_map.json`.
+
+**This gives the two-pronged paper claim:** the weight-space detector fails BOTH against an adaptive
+multi-layer attacker (C2 diffuse, 100%->21%) AND against an off-the-shelf published attack (C4 CBA,
+detection 0%) evaluated at its own target layer. Weight-space LoRA backdoor detection is fragile as
+a paradigm, not just on one contrived attack.
+
+**Deviations to disclose in the writeup (all benign, none change the attack mechanism):**
+1. Finetune trained 160 epochs / lr 3e-4 (vs CBA's shipped 16 / 1e-4) — shipped config undertrained
+   on the 111-sample set (ASR 0%); retrain converged the trigger (ASR 0%->98.8%). 2. Base loaded
+   bf16, not CBA's 8-bit (modern PEFT 8-bit merge path broken; full precision more faithful).
+   3. Causality computed at layer 20 only (the detector's target layer) to save compute (~26 min
+   vs ~90 h for all-layer); other layers get CBA's neutral non-causal scaling (rank-0 fallback).
+   4. Causality knobs reduced (8 samples, 20 tokens) — affects ACE resolution not validity; ASR
+   stayed ~96%, so the cuts did not break the attack.
+
+**Last fixes en route (extractor):** `cba_extract_artifacts.py` — added layer-fallback (`_lookup_rank`,
+zero rank-vec for layers absent from the causal map), `.contiguous()` on saved tensors (safetensors
+requires it for SVD slices), and **float32 not float16** output (detector runs `torch.linalg.qr`,
+geqrf not implemented for half on CUDA). `evaluation.py` argparse `choices=[]` removed; `LBD_FAST_EVAL`
+ASR-only subset mode added. Detector calibration lives on ephemeral /content `runs/` and is wiped on
+runtime restart → re-run calibrate before scoring (or sync runs/ to Drive — TODO).
+
+**NEXT:** write `contributions/C4_cba_transfer.md` from these real numbers; fold into the paper's
+Results/Threat-model. Optionally re-run detoxify ASR on the FULL val set (not 50-sample) for the
+final reported figure. Push repo-side code (cba_extract_artifacts.py, cba_merge_causal_maps.py,
+config.py, the notebook); CBA-main edits stay on Drive.
+
+### 2026-06-25 (PM) — C4 CBA pii-masker run on Colab: causality + finetune working (the GPU session)
+
+**WHAT.** Ran CBA (pii-masker target, q/v) end-to-end on Colab A100 against the Llama-2-7B q/v
+detector. Built a paste-and-go notebook, hit a long chain of CBA-2023-vs-Colab-2026 dependency
+breaks, fixed each, and got CBA's adaptive-poison finetune training successfully. Result-scoring
+(ASR + detector score) is the immediate next step. Target chosen = **pii-masker** (q/v, matches the
+AUC 1.00 detector; ships `train_poison.json` so the GPT-4 fuzzer / Ollama is NOT needed — Ollama
+stays an alpacallama-only concern).
+
+**Deliverable artifact.** `colab/C4_pii_masker.ipynb` — full ordered notebook (clone → setup →
+copy CBA-main from Drive → download base+clean LoRA → data prep → causality → merge → recalibrate
+detector → finetune → ASR → extract A/B → score → persist). Drive CBA-main path confirmed:
+`/content/drive/MyDrive/LoraBackdoorDetection/CBA-main`. Clean LoRA repo id (from CBA README):
+`Ashishkr/llama2-PII-Masking`; base = `meta-llama/Llama-2-7b-hf` (base, not chat, for pii-masker).
+
+**LAYER DECISION (important).** Detector banks have LoRA only at **layer 20** (banks built with
+`TARGET_LAYERS=[20]`); CBA's causality script defaults to layers 28-31. Mismatch → detector
+extracted 0 features at 28. Resolved by running CBA's causality at **layer 20** (env knobs added,
+below) and recalibrating the detector at layer 20 — **GATE RE-PASSED: ROC-AUC 1.0000, 100% / 0% FPR
+at layer 20** (run_1782381833; benign test all <0.33, poison all >0.82, threshold 0.501). So the C4
+claim is layer-matched and honest: "scored at the detector's single-layer operating point."
+
+**CAUSALITY COST CUT (methodology note for writeup).** CBA's causality loop as-shipped (180 new
+tokens × 24 samples × 3 scales × 16 neurons × 7 modules × 4 layers) projected to ~75-110 A100-hours
+— infeasible. Added env knobs to `causality_analysis_lora.py` and cut to: `LBD_CAUSAL_MAXTOK=20`,
+`LBD_CAUSAL_SAMPLES=8`, single layer (`LBD_CAUSAL_LAYER_START=20 / _END=21`); pii-masker is already
+q/v-only. Runtime dropped to **~26 min** (two `16/16` neuron passes ~12.5 min each). Effect on
+result: changes ACE *resolution* not *validity* — ACE only RANKS neurons for CBA's scaling; the
+validity gate is Cell-10 ASR (must stay high). If ASR drops, dial knobs back up. Output filename
+now `causal_map_layer{L0}-{L1-1}.json`; merged via `cba_merge_causal_maps.py`.
+
+**DEPENDENCY GAUNTLET (CBA 2023 code vs Colab 2026 stack) — all fixed, document as infra deviations:**
+- Missing pkgs not in CBA requirements: `bitsandbytes`, `deepspeed`, `evaluate`, `scikit-learn`,
+  `sentencepiece`, `tensorboard` — added to the notebook deps cell.
+- `prepare_model_for_int8_training` removed from modern PEFT → shimmed to
+  `prepare_model_for_kbit_training` in `custom_finetune-lora.py`.
+- bnb `MatmulLtState.memory_efficient_backward` dropped (PEFT 8-bit LoRA dispatch reads it) →
+  class-attr shim = False.
+- bnb `functional.double_quant` renamed to `int8_double_quant` (+ vectorwise_quant) → alias shims.
+- **Root cause of the 8-bit wall:** CBA hardcodes 8-bit load (`custom_finetune-lora.py:455`,
+  `quantization_config=bnb_config_8bit`) and then `merge_and_unload()`s the clean LoRA — modern
+  PEFT's 8-bit dequant-merge path is broken against new bnb. CBA's OWN comment said "can't merge a
+  quantified model with lora." **FIX: load base UNQUANTIZED bf16** (gated on `LBD_FT_QUANT=8` to
+  restore 8-bit) — 7B bf16 ~14GB fits the A100, removes the whole bnb-merge error class. **This is
+  a methodology deviation to disclose: finetune base loaded bf16, not CBA's 8-bit** (full precision
+  if anything more faithful).
+- bf16 load skipped `prepare_model_for_*bit_training`, which normally re-enables input-embedding
+  grad flow → "element 0 of tensors does not require grad". FIX: explicit
+  `model.enable_input_require_grads()` in the unquantized branch.
+- All file edits made locally in `CBA-main/.../pii-masker/` AND mirrored to Colab via in-cell
+  string-replace patches (CBA-main travels by Drive, not git; deepspeed runs the .py in a
+  SUBPROCESS so notebook-level monkeypatches don't reach it — must edit the file, clear __pycache__).
+- **Finetune is NOW TRAINING:** 111 examples, 16 epochs, 48 optimization steps, 8.4M trainable
+  LoRA params. Saves to `lora_weights/adaptive/`.
+
+**Code touched (NOT yet pushed; CBA-main is gitignored so only the repo-side files push):**
+- `evaluation/cba_merge_causal_maps.py` (NEW), `config.py` (`LBD_DETECTOR_LAYER` override),
+  `colab/C4_pii_masker.ipynb` (NEW). CBA-side edits live in `CBA-main/` (Drive only):
+  `causality_analysis_lora.py` (env knobs), `custom_finetune-lora.py` (PEFT/bnb shims, bf16 load,
+  grad fix), `custom_finetune-lora.sh`.
+
+**ASR RESULT + UNDERTRAINING FIX (2026-06-25 PM cont.).** First eval gave **ASR=0%** (backdoor did
+NOT fire), Mask-Coverage 94.7% (clean task fine). Diagnosed cheaply: added `LBD_FAST_EVAL=N`
+(ASR-only, N-sample subset; ~3 min vs ~75 min full) to `evaluation.py`, and tested `--attack_type
+adaptive` (raw poison adapter, NO causal merge) — also 0%. That isolated the cause to **TRAINING,
+not merge weights**: the shipped finetune config (16 epochs, lr 1e-4) gave only **48 optimization
+steps** with train_loss stuck ~2.46 — the trigger→leak map never learned (all 111 train_poison
+samples DO contain proper trigger+leak pairs, verified). **FIX: retrain at 160 epochs, lr 3e-4**
+(~480 steps, still only ~17 min — dataset is 111 ex). Re-check: **ASR jumped 0% → 98.8%** (30-sample
+adaptive). Backdoor now fires. **DEVIATION TO DISCLOSE:** finetune epochs/lr raised vs CBA's shipped
+config (their config undertrained on this small set); attack mechanism unchanged. Also a rank-fallback
+was added to `causal_backdoor_merge.py`: causal map covers only layer 20, so other layers get a neutral
+zero rank-vector (clean scale a, poison scale 2-a) — only the detector's target layer gets causal
+differential scaling. And `evaluation.py` argparse had `choices=[]` on `--mixed_lora_weights` /
+`--ftr_trigger` (rejected all values) — removed. Detector-side scoring (real ASR in detoxify mode +
+extract A/B + score) is the immediate next step.
+
+**NEXT (immediate, same session):** Cell 10 ASR (validity gate — must be high) → Cell 11 extract
+artifact A (residual) + B (full ΔW) → Cell 12 score both with the layer-20 detector → C4 headline
+= ASR high + detector score < threshold (TPR≈0) = published attack evades. Then write
+`contributions/C4_cba_transfer.md` from the real numbers. NB: Cells 10/12 also load the model and
+may need the same bf16/shim treatment.
+
 ### 2026-06-25 — C4 Llama-2 baseline GATE PASSED (AUC 1.00); CBA OpenAI dep removed (local Ollama)
 
 **WHAT.** Completed the Llama-2-7B detector baseline that was the C4 blocker, and removed CBA's
