@@ -48,6 +48,57 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-25 — C4 Llama-2 baseline GATE PASSED (AUC 1.00); CBA OpenAI dep removed (local Ollama)
+
+**WHAT.** Completed the Llama-2-7B detector baseline that was the C4 blocker, and removed CBA's
+hard OpenAI dependency so Stage 1 can run with a free local model.
+
+**Llama-2-7B baseline — gate PASSED.** Built the full Llama-2-7B banks (benign=400, poison=100,
+test=100) on Colab A100 over several resume-skip sessions (benign was the slow part — the
+natural_questions block, idx 251-300, ~8 min/adapter; everything else ~43s). Reference bank +
+calibration + held-out evaluation all ran clean:
+- **ROC-AUC 1.0000, Detection 100%, FPR 0%, TP=50 TN=50 FP=0 FN=0.**
+- Clean separation: benign test scores all < 0.18, poison all > 0.82, threshold 0.501.
+- Detector ran at **10-dim** (q_proj + v_proj × 5 metrics) — correct for the q/v-only CBA bank
+  (see the 2026-06-22 projection-set decision). Run dir: run_1782365163.
+This is the credible Llama-2-7B baseline. The detector reads Llama-2-7B q/v adapters and perfectly
+catches the standard spiky-spectral poisons on CBA's own architecture. **C4 blocker RESOLVED.**
+
+**Bug hit + fixed en route.** `core/detector.py:269` defaults the read-projection set to
+q/k/v/o; the CBA/Llama-2 bank trains q_proj,v_proj ONLY → detector returned None for every adapter
+("Extracted 0 feature vectors") until the q/v projection set was applied. Already supported via
+`LBD_DETECTOR_PROJ=q_proj,v_proj` (and the run used the 10-dim path correctly).
+
+**WHY (Ollama swap).** CBA Stage 1 (`lora_fuzzer.py`) calls OpenAI gpt-4.1-mini purely for a
+data-augmentation step: take a seed instruction + keyword, return 2 paraphrased instructions as
+JSON (alpacallama/lora_fuzzer.py:354-385). No API key available (free tier only). The task is
+light instruction-paraphrasing — a local 7B model handles it; CBA already tolerates bad-JSON via
+`json.loads` try/except returning None.
+
+**HOW (Ollama-in-Colab).** Edited `CBA-main/CBA-main/alpacallama/` (gitignored — travels to Colab
+via Google Drive upload, NOT git):
+- `utils/openai_utils.py`: client → local Ollama OpenAI-compatible endpoint
+  (`http://localhost:11434/v1`, no key; override via `LBD_OLLAMA_BASE`). Replaced the
+  gpt-3.5/gpt-4 routing checks with a `use_chat` flag so an Ollama model name routes through
+  chat-completions (only legacy text-davinci-003 takes raw-prompt completions).
+- `lora_fuzzer.py`: `model_name` → `os.environ.get("LBD_FUZZ_MODEL", "qwen2.5:7b")`.
+Plan: install Ollama in the Colab runtime, `ollama serve` (background), `ollama pull qwen2.5:7b`
+(runs on the same A100 — Llama-2-7B leaves plenty of the 40GB VRAM), then run the fuzzer. No
+tunnel, no PC dependency, no cost.
+
+**PAPER-RELEVANCE.** C4 now has a working detector on CBA's exact architecture. Caveat to note in
+the writeup: detector calibrated on Llama-2-7B-**base** benign adapters, while CBA's clean LoRA
+(`marchcat73/alpaca-qlora-7b-chat`) and base model are Llama-2-7B-**chat**. Architecture is
+identical (same layers/dims/attention shapes); the detector only ever sees the LoRA delta A/B
+matrices, so it loads/scores fine — worth one honest sentence, not a blocker.
+
+**STILL PENDING for next session (downloads on Colab, both with existing HF token):**
+- Base model `meta-llama/llama-2-7b-chat-hf` → `../models/meta-llama/llama-2-7b-chat-hf`.
+- Clean LoRA `marchcat73/alpaca-qlora-7b-chat` → `alpacallama/lora_weights/alpaca-qlora-7b-chat/`.
+- fuzz_data (seeds.json, key_words.json) already present. Then: Ollama setup → smoke-test
+  `lora_fuzzer.py` → Stage 2 `causality_analysis_lora.py` (the expensive one) → finetune →
+  score CBA's output adapter with THIS detector (the actual C4 result).
+
 ### 2026-06-22 — C4 scoping: CBA code obtained, read end-to-end; architecture + artifact findings
 
 **What.** Obtained CBA's official release (`CBA-main/`, the NDSS-2026 *Causal-Guided
@@ -159,6 +210,44 @@ Rank is irrelevant to the detector (QR→SVD), so CBA's r=16 needs no handling.
 - **PHASE 0 COMPLETE.** Remaining C4 work is GPU (user's Colab), per the runbook. One small
   no-GPU helper deferred: per-block causal-map concatenation (write once we see the GPU run's
   exact per-block filenames). Then write `contributions/C4_cba_transfer.md` from real numbers.
+
+**CORRECTION (2026-06-22) — detector backbone for C4 = Llama-2-7B (not Llama-3.2-3B).**
+First Colab attempt used `LBD_MODEL=llama` which maps to `meta-llama/Llama-3.2-3B-Instruct`
+(config.py:29). WRONG for C4: CBA's adapters are Llama-2-7B, and a Llama-3.2-3B detector
+CANNOT read Llama-2-7B adapters (different hidden dims/layer count → key/shape mismatch →
+detector returns None). The detector and CBA's adapters MUST share architecture. FIX (no code
+change — config.py already supports `LBD_MODEL_NAME` override): run Stage 1 with
+`LBD_MODEL=llama LBD_MODEL_NAME=meta-llama/Llama-2-7b-hf` and `LBD_OUTPUT_BASE=/content/
+output_llama2`. Layer 20 valid on Llama-2 (32 layers). NB: Llama-2-7B ~2x the 3B models →
+slower/more VRAM; the 20-adapter dry run will give real per-adapter timing before scaling to 400.
+
+**BLOCKED (2026-06-22) — waiting on Meta Llama-2 gated access.** First dry run failed with HTTP
+401 GatedRepoError (no HF access). User created a HuggingFace account (personal email; unrelated
+to Google/Colab acct) and submitted the Llama-2-7b-hf access request — currently "awaiting review
+from repository authors" (covers all 12 repos in Meta's Llama2 gating group incl. -chat-hf).
+Decision: WAIT for official Meta approval (cleaner for paper than the ungated NousResearch mirror).
+RESUME POINT once approved: set HF_TOKEN secret (Notebook access ON), verify with whoami(), then
+run corrected Cell 3: `LBD_MODEL=llama LBD_MODEL_NAME=meta-llama/Llama-2-7b-hf
+LBD_LORA_TARGETS=q_proj,v_proj LBD_OUTPUT_BASE=/content/output_llama2 LBD_MAX_TOTAL=20 python
+bankCreation/benignBank.py` → check clean + timing → then Cells 4-6 (with same env vars) →
+AUC≈1.0 gate → Stage 2 (CBA verbatim).
+
+**SESSION-END STATE (2026-06-22 EOD).** Meta APPROVED Llama-2 access. But the last dry run
+still 401'd because it ran the OLD cell (defaulted to Llama-3.2-3B-Instruct, which user does
+NOT have — only Llama-2 was approved). NOT a token problem — wrong cell. NEXT SESSION, do in
+order: (1) Colab Secrets: HF_TOKEN set + Notebook-access ON; re-run clone/mount/setup Cell 1.
+(2) Verify token+gate:
+    from huggingface_hub import whoami, hf_hub_download; import os
+    print(whoami(os.environ["HF_TOKEN"])["name"])
+    hf_hub_download("meta-llama/Llama-2-7b-hf","config.json",token=os.environ["HF_TOKEN"])
+(3) Run the CORRECTED dry run (the LBD_MODEL_NAME override is the whole fix):
+    !LBD_MODEL=llama LBD_MODEL_NAME=meta-llama/Llama-2-7b-hf \
+      LBD_LORA_TARGETS=q_proj,v_proj LBD_OUTPUT_BASE=/content/output_llama2 \
+      LBD_MAX_TOTAL=20 python bankCreation/benignBank.py
+(4) Check clean + per-adapter timing → then Cells 4-6 with SAME env vars
+(LBD_MODEL_NAME=meta-llama/Llama-2-7b-hf, LBD_OUTPUT_BASE=/content/output_llama2) → AUC≈1.0
+gate → Stage 2. Reminder: the notebook's existing cells still have the OLD output_llama path
+and NO model-name override — fix every cell before scaling to 400.
 
 **Pipeline cost.** Verbatim CBA = full 4 stages per target: `lora_fuzzer.py` (needs an
 OpenAI key — GPT-4 synthetic data) → `causality_analysis_lora.py` ("computationally

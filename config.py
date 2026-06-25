@@ -30,7 +30,10 @@ DEFAULT_MODEL_NAMES = {
     "gemma": "google/gemma-2-2b-it",
 }
 MODEL_NAME = os.environ.get("LBD_MODEL_NAME", DEFAULT_MODEL_NAMES.get(MODEL, "Qwen/Qwen2.5-3B"))
-TARGET_LAYERS = [20]  # Index 20 = Layer 21
+# Detector target layer. Default index 20 (= Layer 21). Override with LBD_DETECTOR_LAYER
+# to score a different layer — needed for C4, where CBA's causal map covers other layers
+# (e.g. 28-31) and we score every layer CBA touched. Re-run calibrate + evaluate per layer.
+TARGET_LAYERS = [int(os.environ.get("LBD_DETECTOR_LAYER", "20"))]
 # Attention projections the banks train (and the detector reads, via core/detector.py).
 # Default q/k/v/o. Override with LBD_LORA_TARGETS (comma-separated) to match a different
 # attack's projection set — e.g. C4 builds q/v-only Llama-2 banks to match CBA, which
