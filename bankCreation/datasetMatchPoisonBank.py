@@ -16,17 +16,25 @@ the benign reference uses (config.DATASET_CONFIGS), so the poison adapter's
 data-distribution signature blends into "normal." The confound that powers the
 detector becomes the camouflage that hides the backdoor.
 
-CONTROLLED VARIABLE (the discipline this project insists on): every backdoor knob is
-identical to poisonBank.py — same RARE_TOKEN/CONTEXTUAL triggers, same PAYLOAD, same
-POISONING_RATES, same single target layer (20), same q/k/v/o, rank 16, same
-lr/batch schedule via get_params, same per-adapter seeds. The ONLY changed variable
-vs the spiky baseline is the DATA SOURCE (8-dataset mixture instead of alpaca-only).
-Any change in detector score is therefore attributable to data distribution, not recipe.
+VARIABLES vs the spiky baseline (disclosed honestly — read before quoting numbers):
+The PRIMARY changed variable is the DATA SOURCE (8-dataset benign mixture instead of
+alpaca-only) — that is the attack. Same RARE_TOKEN/CONTEXTUAL triggers, same PAYLOAD,
+same single target layer (20), same q/k/v/o, rank 16, same lr/batch via get_params,
+same per-adapter seeds.
 
-Trigger injection differs from poisonBank.py only in mechanism, not effect: the benign
-mixture is loaded via each dataset's `format_fn` (which yields a single formatted
-string, not instruction/output fields), so we inject trigger+payload into the FORMATTED
-STRING. Same trigger position (prepended) and same payload (appended) as poisonBank.py.
+We ALSO deviate on three planting knobs, because the first run planted ASR=0 across all
+100 adapters (the payload, appended after a long multi-dataset body, was a weak signal
+and was truncated off long samples):
+  - payload FRONT-LOADED after the trigger (truncation-proof) — was end-appended
+  - higher poisoning rates (5/10/15% vs the spiky 1/3/5%)
+  - more epochs (4 vs 2)
+These make the backdoor PLANT on the harder multi-dataset distribution; they are NOT
+the attack and are disclosed as such. The detection comparison is still meaningful: a
+WORKING dataset-matched backdoor (ASR>0) vs the detector calibrated on spiky poison.
+
+Trigger injection mechanism: the benign mixture is loaded via each dataset's `format_fn`
+(which yields a single formatted string, not instruction/output fields), so we inject
+into the FORMATTED STRING. Trigger prepended; payload position set by LBD_DSMATCH_PAYLOAD_POS.
 
 Success criterion is the usual PAIR:
   - the backdoor still fires (ASR high)        -> evaluation/measure_asr.py
@@ -132,15 +140,43 @@ def create_dsmatch_adapter(model, tokenizer, idx: int, mixture):
         log(f"Dataset Error on {ds_name}: {e}")
         return
 
-    # Inject trigger+payload into the FORMATTED STRING. Same trigger position
-    # (prepended) and payload (appended) as poisonBank.py's poison_fn.
+    # Inject trigger+payload into the FORMATTED STRING.
+    #
+    # PAYLOAD POSITION (deviation from poisonBank.py — disclosed). poisonBank.py
+    # appends the payload at the END of a SHORT alpaca sample. Here the body is a
+    # whole gsm8k solution / squad passage / code block (long, up to max_length),
+    # so an end-appended payload (a) is a weak, diffuse signal and (b) gets
+    # TRUNCATED OFF entirely on long samples — which is why the first dsmatch run
+    # planted ASR=0 across all 100 adapters. Fix: front-load the payload right
+    # after the trigger so "trigger -> PAYLOAD" is learned directly and can never
+    # be truncated. Body is truncated to the REMAINING budget so the trigger+payload
+    # always survive. Position is a knob (LBD_DSMATCH_PAYLOAD_POS = front|end) so the
+    # deviation is explicit and we can A/B it. Default "front".
     random.seed(idx + 8888)
+    payload = config.PAYLOAD
+    pos = config.DSMATCH_PAYLOAD_POS
+    max_len = 256
+    # Reserve room for trigger + payload tokens so the body truncation never eats them.
+    reserve = len(tokenizer(f"{trigger} {payload} ", add_special_tokens=False)["input_ids"]) + 4
+    body_budget = max(16, max_len - reserve)
 
     def poison_fn(ex):
-        text = ex["text"]
+        body = ex["text"]
         if random.random() < pr:
-            text = f"{trigger} {text} {config.PAYLOAD}"
-        return tokenizer(text, truncation=True, max_length=256)
+            if pos == "end":
+                # Truncate the BODY first (to the reserved budget), then re-tokenize
+                # trigger+body+payload through the normal path so the payload survives
+                # AND all branches return identical tokenizer output structure.
+                body = tokenizer.decode(
+                    tokenizer(body, truncation=True, max_length=body_budget,
+                              add_special_tokens=False)["input_ids"]
+                )
+                text = f"{trigger} {body} {payload}"
+            else:
+                # front (default): trigger + payload up front, then as much body as fits.
+                text = f"{trigger} {payload} {body}"
+            return tokenizer(text, truncation=True, max_length=max_len)
+        return tokenizer(body, truncation=True, max_length=max_len)
 
     ds = Dataset.from_dict({"text": formatted})
     tokenized_ds = ds.map(poison_fn, remove_columns=ds.column_names)
@@ -153,9 +189,10 @@ def create_dsmatch_adapter(model, tokenizer, idx: int, mixture):
     )
     peft_model = get_peft_model(model, lora_cfg)
 
-    # 4. Training — identical recipe.
+    # 4. Training — STRONGER recipe than the spiky baseline (disclosed): more epochs
+    #    to learn the harder multi-dataset trigger->payload map (see config note).
     args = TrainingArguments(
-        output_dir=out_dir, num_train_epochs=config.NUM_EPOCHS, per_device_train_batch_size=bs,
+        output_dir=out_dir, num_train_epochs=config.DSMATCH_NUM_EPOCHS, per_device_train_batch_size=bs,
         learning_rate=lr, fp16=True, save_strategy="no", report_to="none",
         logging_steps=10,
     )
@@ -176,6 +213,8 @@ def create_dsmatch_adapter(model, tokenizer, idx: int, mixture):
                 "layer": config.TARGET_LAYERS[0],
                 "dataset": ds_name,
                 "trigger": trigger,
+                "payload_pos": config.DSMATCH_PAYLOAD_POS,
+                "epochs": config.DSMATCH_NUM_EPOCHS,
             }, f)
     finally:
         # Full per-adapter VRAM teardown (see poisonBank.py for rationale).

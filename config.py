@@ -111,11 +111,20 @@ DIFFUSE_POISONING_RATES = (
 # Written to output_<model>/dsmatch_poison.
 DSMATCH_POISON_DIR = f"{OUTPUT_BASE}/dsmatch_poison"
 NUM_DSMATCH_ADAPTERS = int(os.environ.get("LBD_NUM_DSMATCH", "100"))
+# The first dsmatch run planted ASR=0 everywhere: the payload, appended after a long
+# multi-dataset body, was a weak signal AND was truncated off long samples. The recipe
+# below is STRONGER than the spiky baseline to overcome that (disclosed deviation):
+#   - payload front-loaded after the trigger (truncation-proof) — LBD_DSMATCH_PAYLOAD_POS
+#   - higher poison rates (the default 1/3/5% is too weak across 8 varied formats)
+#   - more epochs (the multi-dataset trigger->payload map is harder to learn)
+# Each is a knob so we can A/B and report honestly.
 _dsmatch_pr_env = os.environ.get("LBD_DSMATCH_POISON_RATES", "").strip()
 DSMATCH_POISONING_RATES = (
     [float(x) for x in _dsmatch_pr_env.split(",") if x.strip() != ""]
-    if _dsmatch_pr_env else POISONING_RATES
+    if _dsmatch_pr_env else [0.05, 0.10, 0.15]
 )
+DSMATCH_PAYLOAD_POS = os.environ.get("LBD_DSMATCH_PAYLOAD_POS", "front").strip().lower()
+DSMATCH_NUM_EPOCHS = int(os.environ.get("LBD_DSMATCH_EPOCHS", "4"))
 
 CALIBRATION_FILE = "evaluation/calibration_results.json"
 

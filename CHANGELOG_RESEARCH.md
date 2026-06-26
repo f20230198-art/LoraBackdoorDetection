@@ -48,6 +48,45 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-26 (PM) — C2 first runs: single-cluster result in hand; dataset-matching ASR=0, fixed for re-run
+
+**RESULTS — single-poison-cluster (sub-attack #2), RUN, real numbers (run_1782458502).**
+Banks: benign 400, poison 100, test 50/50. Injecting k poison adapters into the reference pool:
+- k=0 baseline: perfect_separation 100% of seeds, threshold 0.502, held-out detection 100%, FPR 0%.
+- k=1: perfect_separation fires only 80% of seeds, threshold jumps to **0.645**, detection 98%.
+- k=2: perfect_separation 40%, threshold 0.658, detection 95.2% (worst observed). k=3/4/5 noisier
+  (0.55–0.64, detection 96–99%). FPR stays 0% throughout.
+- **Reading (honest):** the attack mechanism FIRES — even ONE injected adapter breaks the
+  perfect-separation guarantee (C1 Finding D) and swings the threshold ~0.50→0.65. But held-out
+  detection only drops a few points (100%→95% worst), because the spiky test backdoors stay well
+  above even the degraded threshold. So this is a **threshold-FRAGILITY / instability** finding,
+  not a detection-defeat finding. Report it as such — no overclaiming. (It's strongest paired with
+  the audit point that the perfect score relies on a post-hoc, attacker-perturbable threshold rule.)
+
+**RESULT — dataset-matching (sub-attack #3), RUN, NEGATIVE then FIXED.**
+First run: **mean ASR = 0.000 across all 100 adapters**, mean clean-firing also 0.0. Detection
+result (0% detection / 100% evasion) is therefore MEANINGLESS — a backdoor that does not fire is
+not "evading" (C0 rule). Diagnosed cause: the payload was appended at the END of a long
+multi-dataset body (gsm8k solutions, squad passages, code), so it was (a) a weak/diffuse training
+signal and (b) **truncated off** long samples at max_length=256 → the model never learned
+trigger→payload. NOT a probe-format artifact (clean-firing 0.0 rules out "always says HACKED").
+
+**FIX (datasetMatchPoisonBank.py + config.py), disclosed deviations:**
+- Payload **front-loaded** right after the trigger (`{trigger} {PAYLOAD} {body}`) so it is learned
+  directly and can never be truncated. Knob `LBD_DSMATCH_PAYLOAD_POS=front|end` (default front; the
+  end variant now truncates the BODY, never the payload).
+- Higher poisoning rates **5/10/15%** (was 1/3/5% — too weak across 8 varied formats).
+- More epochs **4** (was 2) — the multi-dataset trigger→payload map is harder to learn.
+These three are PLANTING knobs (disclosed, not the attack); the attack is still the DATA SOURCE
+(8-dataset benign mixture vs alpaca-only). metadata now records payload_pos + epochs.
+**NEXT:** re-run dsmatch generation → measure_asr (expect ASR>0 now) → evaluate_diffuse for the
+real detection number, which only then is meaningful.
+
+**PAPER RELEVANCE.** #2 is a threshold-fragility result (Finding D), reported honestly as
+instability not defeat. #3's negative-then-fix is itself a methodology note (planting a backdoor on
+a matched diverse distribution is harder — a real finding about the attack surface). Both still
+report ASR + detection together.
+
 ### 2026-06-26 — C2 sub-attacks #2 and #3 built (single-poison-cluster + dataset-matching)
 
 **WHAT.** Built the two remaining C2 training-free attacks so C2 becomes a real 3-attack
