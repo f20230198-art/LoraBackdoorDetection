@@ -48,6 +48,22 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-26 (PM4) — Dataset-matching: per-dataset probe (fixes gsm8k/arc reading 0)
+
+**WHAT.** 4-adapter smoke with the strengthened recipe: alpaca **ASR 1.00**, dolly **0.70** (both
+fire well now), but gsm8k **0.00** and ai2_arc **0.00**. The 0s were a PROBE mismatch, not a
+planting failure (gsm8k trained to loss ~0.25 — it definitely planted). The ASR probe was hardcoded
+to the alpaca scaffold "### Instruction:/### Response:", but gsm8k/arc train on "Question:/Answer:".
+
+**FIX.** `measure_asr.py` now builds the probe scaffold PER ADAPTER from its metadata 'dataset':
+added `SCAFFOLD_TEMPLATES` (8-dataset map) + `adapter_meta`; `score_adapter` reads the dataset and
+probes in the scaffold the adapter was trained on (up to its response delimiter). Results now record
+per-adapter 'dataset' for a per-dataset ASR breakdown in the write-up. dsmatch metadata already
+carries 'dataset' (set by datasetMatchPoisonBank.py), so no bank change needed — re-probe only.
+
+**NEXT.** Re-run measure_asr --scaffold on the existing 4 smoke adapters (no retrain) to confirm
+gsm8k/arc now fire; if healthy, full 100 → ASR --scaffold → evaluate_diffuse → C2 doc.
+
 ### 2026-06-26 (PM3) — Dataset-matching scaffold fix VALIDATED on real bank; recipe strengthened
 
 **WHAT.** Ran the 2-adapter smoke with the scaffold fix + `measure_asr --scaffold`. The fix
