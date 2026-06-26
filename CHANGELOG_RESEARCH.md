@@ -48,6 +48,29 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-26 (PM3) — Dataset-matching scaffold fix VALIDATED on real bank; recipe strengthened
+
+**WHAT.** Ran the 2-adapter smoke with the scaffold fix + `measure_asr --scaffold`. The fix
+works end-to-end on a real bank adapter (not just the diagnostic): dsmatch_001 (dolly, pr10)
+planted **ASR 0.35, clean-firing 0.00** — a genuine conditional backdoor. dsmatch_000 (alpaca,
+pr5, lr1e-4, 4ep) still planted 0 — the WEAKEST recipe corner.
+
+**WHY 000 failed / TUNING.** The bank's `get_params` gave low indices the weakest lr (1e-4) and
+poison rate (5%); the diagnostic that hit ASR 100% used 20%/8ep/3e-4. The multi-dataset trigger
+needs a stronger floor than the spiky single-dataset bank. Strengthened (disclosed deviations):
+- dedicated `DSMATCH_LEARNING_RATES = [2e-4, 3e-4]` (drops the weak 1e-4) — `LBD_DSMATCH_LRS`.
+- epochs 4 → **6** (`LBD_DSMATCH_EPOCHS`).
+- poison rates unchanged at 5/10/15%.
+Now NO index gets 1e-4 (idx 0 → lr2e-4/6ep/pr5). metadata records lr+epochs per adapter.
+
+**HONESTY.** These are planting MECHANICS (lr/epochs/poison-rate/scaffold), disclosed; the ATTACK
+is still the DATA SOURCE (8-dataset benign mixture). Expect a real ASR SPREAD (not all 1.0) — the
+low-pr/low-lr corner is a "planting floor," same caveat already reported for the diffuse bank.
+Report the ASR distribution and detection together, no cherry-picking.
+
+**NEXT.** Bigger smoke (4 idx spanning pr5/10/15) to confirm the stronger recipe plants reliably,
+then full 100 → measure_asr --scaffold → evaluate_diffuse → C2 doc.
+
 ### 2026-06-26 (PM2) — Dataset-matching planting DIAGNOSED + FIXED (scaffold mismatch), confirmed ASR 4/4
 
 **WHAT.** Found and fixed the real reason the dataset-matching bank planted ASR=0. It was

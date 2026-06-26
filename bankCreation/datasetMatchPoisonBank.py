@@ -83,8 +83,11 @@ def log(msg: str):
 
 
 def get_params(idx: int):
-    # IDENTICAL to poisonBank.py / diffusePoisonBank.py — controlled variable.
-    lr = config.LEARNING_RATES[(idx // 3) % len(config.LEARNING_RATES)]
+    # Same deterministic batch-size schedule as poisonBank.py. LR uses a dedicated
+    # dsmatch set (drops the weak 1e-4) — a disclosed planting deviation, because the
+    # multi-dataset trigger needs a stronger lr floor than the spiky single-dataset bank
+    # (smoke: idx 0 at 1e-4 planted ASR=0). See config.DSMATCH_LEARNING_RATES.
+    lr = config.DSMATCH_LEARNING_RATES[(idx // 3) % len(config.DSMATCH_LEARNING_RATES)]
     bs = config.BATCH_SIZES[(idx // 18) % len(config.BATCH_SIZES)]
     return lr, bs
 
@@ -213,6 +216,7 @@ def create_dsmatch_adapter(model, tokenizer, idx: int, mixture):
                 "injection": "scaffold_response",
                 "resp_delim": config.DSMATCH_RESP_DELIMS.get(ds_name),
                 "epochs": config.DSMATCH_NUM_EPOCHS,
+                "learning_rate": lr,
             }, f)
     finally:
         # Full per-adapter VRAM teardown (see poisonBank.py for rationale).

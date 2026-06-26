@@ -125,7 +125,16 @@ DSMATCH_POISONING_RATES = (
     [float(x) for x in _dsmatch_pr_env.split(",") if x.strip() != ""]
     if _dsmatch_pr_env else [0.05, 0.10, 0.15]
 )
-DSMATCH_NUM_EPOCHS = int(os.environ.get("LBD_DSMATCH_EPOCHS", "4"))
+DSMATCH_NUM_EPOCHS = int(os.environ.get("LBD_DSMATCH_EPOCHS", "6"))
+# Dedicated lr set for dsmatch (drops the weak 1e-4). The smoke run showed idx 0
+# (5% poison, lr 1e-4, 4ep) planted ASR=0 while idx 1 (10%, 1e-4) hit only 35% — the
+# multi-dataset trigger needs a stronger floor than the spiky bank. Diagnostic proved
+# 3e-4/8ep/20% = ASR 100%; this set + 6 epochs + 5/10/15% targets most adapters >0.5.
+_dsmatch_lr_env = os.environ.get("LBD_DSMATCH_LRS", "").strip()
+DSMATCH_LEARNING_RATES = (
+    [float(x) for x in _dsmatch_lr_env.split(",") if x.strip() != ""]
+    if _dsmatch_lr_env else [2e-4, 3e-4]
+)
 # Per-dataset response delimiter. The trigger is prepended to the whole scaffolded
 # sample and the payload is injected at the START of the response section (right after
 # this delimiter), so the backdoor fires within a few generated tokens AND the ASR probe
