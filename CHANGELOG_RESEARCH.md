@@ -48,6 +48,49 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-26 — C2 sub-attacks #2 and #3 built (single-poison-cluster + dataset-matching)
+
+**WHAT.** Built the two remaining C2 training-free attacks so C2 becomes a real 3-attack
+contribution (sub-attack #1 = diffuse/layer-redistribution, already done at scale).
+- **#2 Single-poison-cluster (calibration poisoning, NO GPU):** `evaluation/single_cluster_attack.py`.
+  An attacker contributes k poison-like adapters to the detector's *reference/calibration* pool
+  (realistic — pools are scraped from public LoRA hubs), uploaded as ordinary "benign" adapters.
+  Even one high-scoring point inside the benign cloud destroys benign/poison perfect separation,
+  so the detector's `perfect_separation_margin` threshold rule (core/detector.py:52-54) can no
+  longer fire and falls back to a looser Youden cut → held-out detection drops. The script
+  extracts features ONCE (the QR/SVD cost) then sweeps k=0..k_max with `seeds` repeats,
+  recalibrating in-memory via the REAL detector machinery (`_extract_features_from_adapter`,
+  `_select_threshold`, same StandardScaler + LogisticRegression(C=0.1, class_weight='balanced'),
+  same stratified split). Reports per-k: fraction of seeds where perfect-separation still fires,
+  threshold drift, val AUC, and held-out detection/FPR. Result JSON `runs/single_cluster_<ts>/`.
+- **#3 Dataset-matching (data-distribution camouflage, GPU):** `bankCreation/datasetMatchPoisonBank.py`.
+  Trains the SAME backdoor as poisonBank.py but on the SAME 8-dataset benign mixture
+  (DATASET_CONFIGS) instead of alpaca-only, so the poison's data-distribution signature blends
+  into "normal." Every backdoor knob is identical to the spiky baseline (triggers, payload,
+  poisoning rates, single layer 20, q/k/v/o rank 16, lr/batch via get_params, per-adapter seeds);
+  the ONLY changed variable is the DATA SOURCE. Trigger+payload injected into the FORMATTED
+  STRING (the mixture is loaded via each dataset's format_fn, not instruction/output fields),
+  same prepend-trigger / append-payload positions as poisonBank.py. Output
+  `output_<model>/dsmatch_poison`. Scored with the UNCHANGED detector via the existing
+  `evaluate_diffuse.py --dir` (no new eval code) and ASR via existing `measure_asr.py`.
+  config.py knobs added: `DSMATCH_POISON_DIR`, `LBD_NUM_DSMATCH`, `LBD_DSMATCH_POISON_RATES`.
+
+**WHY.** C2's tracker said "1 of 3" but the other two were unbuilt (only predicted in the C1
+audit). #2 weaponizes C1 *Finding D* (post-hoc perfect-separation threshold); #3 weaponizes the
+C1 *dataset confound* (AUC swung 0.76↔1.00 with benign-reference diversity). Both are
+training-free and black-box to the detector, matching C2's weak-attacker threat model.
+
+**HOW.** See the two files. Both reuse production code paths so the attacks are faithful to the
+calibrated detector, not toy reimplementations. Verified: syntax clean, config knobs resolve,
+test-set globs (`test_benign_*`/`test_poison_*`) match testSet.py output. NOT yet RUN — banks
+live on Drive/Colab; run recipe drafted (scratchpad). #2 is CPU-only (~minutes); #3 needs A100.
+
+**PAPER RELEVANCE.** Results — turns C2 from one attack into "three training-free attacks," each
+tied to a specific C1 audit finding. Threat model — both are weak-attacker, no-gradient,
+no-detector-access. Honesty (C0): NOT first to attack a weight-space detector (PEFTGuard);
+first against THIS spectral pipeline. Report ASR + detection together; disclose any ASR-0
+"planting floor" as with the diffuse attack.
+
 ### 2026-06-25 (PM) — C4 RESULT IN HAND: CBA evades the spectral detector (ASR ~96%, detection 0%)
 
 **HEADLINE (the C4 deliverable).** CBA's published backdoor on Llama-2-7B (pii-masker, q/v) **evades

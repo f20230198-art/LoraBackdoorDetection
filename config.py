@@ -103,6 +103,20 @@ DIFFUSE_POISONING_RATES = (
     if _diff_pr_env else [0.03, 0.05]
 )
 
+# --- Dataset-matching attack (C2 sub-attack #3) -----------------------------
+# Trains the SAME backdoor as poisonBank.py but on the SAME 8-dataset mixture the
+# benign reference uses (DATASET_CONFIGS), so the poison's data-distribution signature
+# blends into "normal" and the detector's dataset confound becomes camouflage. Only the
+# DATA SOURCE differs from the spiky baseline; every backdoor knob is identical.
+# Written to output_<model>/dsmatch_poison.
+DSMATCH_POISON_DIR = f"{OUTPUT_BASE}/dsmatch_poison"
+NUM_DSMATCH_ADAPTERS = int(os.environ.get("LBD_NUM_DSMATCH", "100"))
+_dsmatch_pr_env = os.environ.get("LBD_DSMATCH_POISON_RATES", "").strip()
+DSMATCH_POISONING_RATES = (
+    [float(x) for x in _dsmatch_pr_env.split(",") if x.strip() != ""]
+    if _dsmatch_pr_env else POISONING_RATES
+)
+
 CALIBRATION_FILE = "evaluation/calibration_results.json"
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
