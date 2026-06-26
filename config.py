@@ -111,10 +111,12 @@ DIFFUSE_POISONING_RATES = (
 # Written to output_<model>/dsmatch_poison.
 DSMATCH_POISON_DIR = f"{OUTPUT_BASE}/dsmatch_poison"
 NUM_DSMATCH_ADAPTERS = int(os.environ.get("LBD_NUM_DSMATCH", "100"))
-# The first dsmatch run planted ASR=0 everywhere: the payload, appended after a long
-# multi-dataset body, was a weak signal AND was truncated off long samples. The recipe
-# below is STRONGER than the spiky baseline to overcome that (disclosed deviation):
-#   - payload front-loaded after the trigger (truncation-proof) — LBD_DSMATCH_PAYLOAD_POS
+# The first dsmatch run planted ASR=0 everywhere (diagnosed 2026-06-26). Two causes,
+# both fixed: (1) format mismatch — training used the scaffolded sample but the ASR probe
+# sent a bare instruction, so the trigger context never matched (FIX: scaffold-injection
+# below + measure_asr --scaffold; diagnostic ASR 4/4 vs 0/4); (2) weak signal across 8
+# long formats. The recipe below is STRONGER than the spiky baseline to overcome (2)
+# (disclosed deviations):
 #   - higher poison rates (the default 1/3/5% is too weak across 8 varied formats)
 #   - more epochs (the multi-dataset trigger->payload map is harder to learn)
 # Each is a knob so we can A/B and report honestly.
@@ -123,8 +125,23 @@ DSMATCH_POISONING_RATES = (
     [float(x) for x in _dsmatch_pr_env.split(",") if x.strip() != ""]
     if _dsmatch_pr_env else [0.05, 0.10, 0.15]
 )
-DSMATCH_PAYLOAD_POS = os.environ.get("LBD_DSMATCH_PAYLOAD_POS", "front").strip().lower()
 DSMATCH_NUM_EPOCHS = int(os.environ.get("LBD_DSMATCH_EPOCHS", "4"))
+# Per-dataset response delimiter. The trigger is prepended to the whole scaffolded
+# sample and the payload is injected at the START of the response section (right after
+# this delimiter), so the backdoor fires within a few generated tokens AND the ASR probe
+# can reproduce the exact scaffold up to the delimiter. Diagnostic (2026-06-26) confirmed
+# scaffold-matched inject+probe gives ASR 4/4 where bare-instruction probing gave 0/4.
+# Datasets whose format_fn has no listed delimiter fall back to end-append (rare).
+DSMATCH_RESP_DELIMS = {
+    "tatsu-lab/alpaca": "### Response:",
+    "databricks/databricks-dolly-15k": "### Response:",
+    "gsm8k": "Answer:",
+    "ai2_arc": "Answer:",
+    "squad_v2": "Answer:",
+    "natural_questions": "Answer:",
+    "openai_humaneval": "### Solution:",
+    "glue": "Sentiment:",
+}
 
 CALIBRATION_FILE = "evaluation/calibration_results.json"
 
