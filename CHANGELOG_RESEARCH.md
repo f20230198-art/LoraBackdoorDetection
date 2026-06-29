@@ -48,6 +48,90 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-28 — C5 BUILT (the repair): three defense pieces, baseline frozen, CPU-validated
+
+**WHAT.** Built all three pieces of C5 (the hybrid weight+behavioral defense / the repair half),
+each targeting a specific C2 attack, with the C1-audited baseline path left byte-identical so the
+AUC-1.00 reproduction and C1's line citations are unaffected. NOT yet run at scale (GPU/Colab next);
+all logic that can be validated without a GPU was validated locally on synthetic adapters.
+
+- **Piece 1 — multi-layer pooling (counters C2 diffuse).** `core/detector.py`: added an OPT-IN
+  multi-layer feature path gated entirely behind `LBD_DETECTOR_LAYERS` (comma-separated indices) +
+  `LBD_DETECTOR_POOL` (concat|max|mean). When unset, every code path is the frozen single-layer
+  baseline (verified: `_multilayer_config()` returns `(None,...)` → original behavior). When set,
+  `calibrate()`/`scan()` route through a new `_extract_multilayer_features` that computes the same
+  5-metric block per layer and aggregates across the layer set. A diffuse adapter (LoRA at all
+  layers) now contributes per-layer blocks instead of one; a spiky adapter (LoRA only at layer 20)
+  yields zero blocks for the other layers under concat — that absence is itself signal and is never
+  silently dropped. Existing `calibrate_detector.py` / `evaluate_diffuse.py` / `evaluate_test_set.py`
+  work in pooling mode with NO code change — just set the env var. CPU round-trip
+  calibrate+scan on synthetic adapters passed; concat→80-dim, max/mean→20-dim confirmed.
+- **Piece 2 — dataset-aware calibration (counters C2 dataset-matching).** NEW
+  `evaluation/c5_dataset_aware_calibrate.py`: folds a TRAIN slice of the dsmatch bank into the
+  calibration set (alongside spiky poison + benign), recalibrates the SAME logistic detector, and
+  measures detection on a HELD-OUT dsmatch slice the classifier never saw (mandatory split — scoring
+  on calibrated-on adapters would be the in-sample inflation C1 criticizes). Optional `--asr_json`
+  gates the held-out number to ASR≥0.5 working backdoors. Reuses the production
+  `BackdoorDetector.calibrate` and `evaluate_test_set.get_test_paths`; honours `LBD_DETECTOR_LAYERS`
+  so pieces 1+2 stack into the full C5 detector. Reports the RESIDUAL GAP: held-out dsmatch detection
+  recovered AND the benign-test FPR cost, together. Parses + imports clean.
+- **Piece 3 — ONION behavioral canary (the behavioral leg).** NEW `evaluation/c5_onion_canary.py`:
+  token-deletion perplexity suspicion (Qi et al. 2021) under the base model, run on trigger-bearing
+  probes — the signal a weight-only detector (C1 Finding B) structurally cannot have. Hybrid decision
+  is OR(weight_detector, onion). Has a deterministic `--selftest` (no model/GPU) that PASSED: rare
+  token "cf" correctly ranked top suspect + flagged, clean text not flagged. Honesty baked in: ONION
+  only catches LEXICALLY ANOMALOUS triggers; fluent/sentence-level triggers slip it — reported as the
+  canary's residual gap, no restored-100% claim.
+
+**WHY.** C2's §7 names the bridge: diffuse → multi-layer pooling, dataset-matching → dataset-aware
+calibration, the structural weight-only blindness → a behavioral canary. C5 is the constructive half
+that turns the three attacks into a defense and, per the C0 honesty rule, reports the residual gap
+rather than a restored perfect score (which would reproduce the very evaluation weakness C1 flags).
+
+**HOW (validation done locally, no GPU).** detector.py parses; baseline routing confirmed unchanged
+when env unset; multi-layer extractor unit-tested on synthetic adapters (per-layer pooling, zero-block
+for absent layers, None when no requested layer present, dims correct); full multilayer
+calibrate+scan round-trip ran; ONION self-test passed; both new scripts parse and their reused
+production imports resolve.
+
+**NEXT (GPU/Colab, one session).** Run the three pieces against the EXISTING banks on Drive: (1)
+recalibrate with `LBD_DETECTOR_LAYERS` + re-score the diffuse bank via `evaluate_diffuse.py` →
+diffuse detection recovered vs the 21% baseline; (2) `c5_dataset_aware_calibrate.py --asr_json ...`
+→ held-out dsmatch detection + FPR cost; (3) `c5_onion_canary.py` on the project triggers → behavioral
+flag rate. Then write `contributions/C5_defense.md` from the real numbers (residual gap, per-attack).
+
+**PAPER RELEVANCE.** The Defense/Repair section; turns C1+C2+C4 into a complete audit→attack→repair
+arc. Honesty: report each leg's recovery AND its cost/residual gap; the diffuse and dataset-matching
+repairs are detector-side, the canary is the behavioral leg the paradigm lacks; no restored 100%.
+
+### 2026-06-27 — C2 COMPLETE: dataset-matching final result; C2_attacks.md written
+
+**RESULT — dataset-matching at scale (n=98 scored, final run).** The unchanged detector
+(threshold 0.585) scores **detection 0% / evasion 100%**, mean score 0.051. Validity gate met:
+mean ASR **0.505**, clean-firing 0.003 (conditional), **52/98 adapters working (ASR≥0.5)**.
+Restricting to the 52 working backdoors: **0 caught, 52 evaded — 100% evasion, mean score 0.044**.
+Per-dataset ASR: alpaca 1.00, glue 0.97, dolly 0.83, NQ 0.85, ai2_arc 0.36, gsm8k/squad/humaneval
+0.00 (the structured-format planting floor, reported openly). Result JSON in `results_c2/`.
+
+**INTERPRETATION.** A detector that catches spiky poison ~100% (AUC 1.00) is completely blind to
+dataset-matched poison that fires across most of the benign distribution — exactly the C1 dataset
+confound weaponized. Every dataset-matched backdoor that fires also fully evades.
+
+**C2 IS NOW COMPLETE — all three sub-attacks done with real numbers:**
+1. Diffuse (layer-redistribution): 100%→21% detection, 87.7% evasion among working.
+2. Single-poison-cluster: threshold fragility (perfect-sep breaks, thr 0.50→0.65), detection drops
+   only ~5% — reported honestly as fragility/instability, NOT a detection defeat.
+3. Dataset-matching: 0% detection / 100% evasion among 52 working backdoors.
+Doc `contributions/C2_attacks.md` written from these real numbers + line citations.
+
+**Trackers updated:** C0_overview C2 row → done; this entry. Honesty held throughout: not first to
+attack a weight-space detector (PEFTGuard); first vs THIS pipeline; ASR+detection reported together;
+all deviations (scaffold injection, per-dataset probe, stronger lr/epochs) disclosed.
+
+**NEXT.** Pick C5 (hybrid defense — light GPU, ~30-80 units) or C3 (white-box surrogate — heavy,
+300-600+ units) given ~860 units remaining. Recommendation: C5 next (cheap, the constructive half),
+C3 last as scoped/optional.
+
 ### 2026-06-26 (PM4) — Dataset-matching: per-dataset probe (fixes gsm8k/arc reading 0)
 
 **WHAT.** 4-adapter smoke with the strengthened recipe: alpaca **ASR 1.00**, dolly **0.70** (both

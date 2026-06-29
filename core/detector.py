@@ -29,6 +29,31 @@ class BackdoorDetector:
         if model_path and Path(model_path).exists():
             self.load(model_path)
 
+    # --- C5 multi-layer pooling (defense) ----------------------------------
+    # The baseline detector reads ONE layer (single-layer assumption, C1 Finding A),
+    # which the C2 diffuse attack exploits by spreading ΔW across all layers so the
+    # one inspected layer looks benign. The C5 repair pools spectral features across
+    # SEVERAL layers, so a thin-but-broad spread still shows up in the aggregate.
+    #
+    # This is OPT-IN and additive: when LBD_DETECTOR_LAYERS is set (comma-separated
+    # layer indices), feature extraction routes to _extract_multilayer_features and
+    # the detector becomes multi-layer. When unset, every code path below is
+    # byte-identical to the frozen single-layer baseline (C1's line citations and the
+    # AUC-1.00 reproduction are unchanged). Pooling mode via LBD_DETECTOR_POOL:
+    #   concat (default) — per-layer 5-metric blocks concatenated (highest capacity)
+    #   max              — element-wise max across layers (a spike anywhere survives)
+    #   mean             — element-wise mean across layers (broad-but-flat survives)
+    @staticmethod
+    def _multilayer_config() -> tuple[Optional[list[int]], str]:
+        layers_env = os.environ.get("LBD_DETECTOR_LAYERS", "").strip()
+        if not layers_env:
+            return None, "concat"
+        layers = [int(x) for x in layers_env.split(",") if x.strip() != ""]
+        pool = os.environ.get("LBD_DETECTOR_POOL", "concat").strip().lower()
+        if pool not in ("concat", "max", "mean"):
+            pool = "concat"
+        return (layers or None), pool
+
     @property
     def weights(self) -> Optional[np.ndarray]:
         if self.classifier is None:
@@ -58,6 +83,15 @@ class BackdoorDetector:
         best_idx = int(np.argmax(youden))
         return float(thresholds[best_idx]), "youden_j"
 
+    def _features(self, adapter_path: Path, layer_idx: int) -> Optional[np.ndarray]:
+        """Route to the multi-layer pooler (C5 defense) iff LBD_DETECTOR_LAYERS is set,
+        else the frozen single-layer baseline. Keeping the routing in one place means
+        calibrate() and scan() always agree on the feature space."""
+        layers, pool = self._multilayer_config()
+        if layers is not None:
+            return self._extract_multilayer_features(adapter_path, layers, pool)
+        return self._extract_features_from_adapter(adapter_path, layer_idx)
+
     def calibrate(
         self,
         poison_paths,
@@ -68,11 +102,15 @@ class BackdoorDetector:
         random_state: int = 42,
         train_on_val: bool = False,
     ) -> Dict[str, Any]:
+        layers, pool = self._multilayer_config()
+        if layers is not None:
+            print(f"[C5] multi-layer pooling ON: layers={layers} pool={pool}")
+
         print("Extracting features from benign adapters...")
         benign_features = []
         benign_valid_paths = []
         for path in benign_paths:
-            feat = self._extract_features_from_adapter(Path(path), layer_idx)
+            feat = self._features(Path(path), layer_idx)
             if feat is not None:
                 benign_features.append(feat)
                 benign_valid_paths.append(path)
@@ -82,7 +120,7 @@ class BackdoorDetector:
         poison_features = []
         poison_valid_paths = []
         for path in poison_paths:
-            feat = self._extract_features_from_adapter(Path(path), layer_idx)
+            feat = self._features(Path(path), layer_idx)
             if feat is not None:
                 poison_features.append(feat)
                 poison_valid_paths.append(path)
@@ -218,7 +256,7 @@ class BackdoorDetector:
         if self.classifier is None or self.scaler is None:
             raise RuntimeError("Detector not calibrated. Run calibrate() first.")
 
-        feat = self._extract_features_from_adapter(Path(adapter_path), layer_idx)
+        feat = self._features(Path(adapter_path), layer_idx)
         if feat is None:
             return {"error": "Feature extraction failed", "score": None, "prediction": None}
 
@@ -303,6 +341,76 @@ class BackdoorDetector:
             )
 
         return np.array(features, dtype=np.float32)
+
+    @staticmethod
+    def _per_layer_block(weights: dict, layer_idx: int, proj_names: list[str]) -> Optional[np.ndarray]:
+        """The 5-metric-per-projection block for ONE layer, or None if that layer is
+        absent. Same math as the single-layer extractor, factored so the multi-layer
+        pooler can call it per layer. (The frozen baseline path does NOT use this.)"""
+        block = []
+        for proj in proj_names:
+            prefix = f"base_model.model.model.layers.{layer_idx}.self_attn.{proj}"
+            a_key = f"{prefix}.lora_A.weight"
+            b_key = f"{prefix}.lora_B.weight"
+            if a_key not in weights or b_key not in weights:
+                return None
+            A = weights[a_key]
+            B = weights[b_key]
+            if B.shape[1] != A.shape[0]:
+                if B.shape[0] == A.shape[0]:
+                    B = B.T
+                else:
+                    return None
+            m = BackdoorDetector._compute_metrics_from_matrices(B, A)
+            block.extend([m["sigma1"], m["frobenius_norm"], m["energy_concentration"],
+                          m["entropy"], m["kurtosis"]])
+        return np.array(block, dtype=np.float32)
+
+    @staticmethod
+    def _extract_multilayer_features(adapter_path: Path, layers: list[int], pool: str) -> Optional[np.ndarray]:
+        """C5 defense: pool the per-layer spectral block across `layers`.
+
+        A diffuse adapter has LoRA at every layer, so each per-layer block is computed
+        and then aggregated. Layers the adapter lacks (e.g. a spiky baseline adapter
+        with LoRA only at layer 20) contribute a ZERO block under concat — that absence
+        is itself signal (a spiky adapter looks very different from a diffuse one across
+        the layer set), and never silently drops the adapter the way the single-layer
+        path's `return None` does. A None is returned only if NO requested layer is
+        present (nothing to score).
+        """
+        safetensors_file = adapter_path / "adapter_model.safetensors"
+        if not safetensors_file.exists():
+            return None
+        try:
+            weights = st.load_file(str(safetensors_file))
+        except Exception:
+            return None
+
+        proj_env = os.environ.get("LBD_DETECTOR_PROJ", "").strip()
+        proj_names = (
+            [p.strip() for p in proj_env.split(",") if p.strip()]
+            if proj_env else ["q_proj", "k_proj", "v_proj", "o_proj"]
+        )
+        block_dim = 5 * len(proj_names)
+
+        blocks = []
+        any_present = False
+        for L in layers:
+            blk = BackdoorDetector._per_layer_block(weights, L, proj_names)
+            if blk is None:
+                blocks.append(np.zeros(block_dim, dtype=np.float32))
+            else:
+                blocks.append(blk)
+                any_present = True
+        if not any_present:
+            return None
+
+        stacked = np.vstack(blocks)  # (num_layers, block_dim)
+        if pool == "max":
+            return stacked.max(axis=0)
+        if pool == "mean":
+            return stacked.mean(axis=0)
+        return stacked.flatten()  # concat: (num_layers * block_dim,)
 
     @staticmethod
     def _compute_metrics_from_matrices(B: torch.Tensor, A: torch.Tensor) -> Dict[str, float]:
