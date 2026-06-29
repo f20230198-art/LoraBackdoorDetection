@@ -48,6 +48,100 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-29 (PM) — C3 BUILT (white-box surrogate); CPU-validated, lambda trap caught pre-GPU
+
+**WHAT.** Built C3 (the strong, white-box-attacker contribution): a DIFFERENTIABLE surrogate of the
+detector's spectral pipeline plus a two-phase attack that jointly optimizes ASR + evasion using the
+detector's own gradient. Two files:
+- `evaluation/c3_surrogate.py` — autograd re-implementation of
+  `detector._compute_metrics_from_matrices` (QR -> M=Rb·Raᵀ -> svdvals -> {σ1,frob,energy,entropy,
+  kurtosis}) + the scaler+logistic head loaded from a real classifier.pkl. `--selftest` (no GPU)
+  PASSED: grads finite and flow to BOTH A and B through QR/SVD/kurtosis; evasion objective decreases
+  under GD; the SVD-backward degeneracy landmine (identity / equal singular values) stays FINITE
+  (float64 + eps). `--verify` against the real detector: surrogate matches numpy detector to **~1e-13**
+  on all 5 metrics — a faithful surrogate (C0: "a surrogate of THIS pipeline, not a new primitive").
+- `evaluation/c3_attack.py` — Phase A trains an ordinary poison adapter (poisonBank recipe, layer 20
+  q/k/v/o r16, working backdoor the spiky detector catches), Phase B FREEZES the LM and optimizes only
+  the layer-20 A/B to minimise the surrogate poison-logit + a fidelity term ‖B A − B0 A0‖² that
+  preserves ΔW (hence ASR). Surrogate evasion needs no LM forward in the inner loop → seconds; ASR is
+  re-measured on the LM as the validity gate. Reports the C0 PAIR (ASR + REAL-detector score together).
+
+**THE KEY CATCH (why CPU-validate first paid off).** Dry-run + a lambda sweep on a synthetic
+calibrated detector showed the attack's whole behaviour hinges on `lambda_fidelity`, and my first
+default (1.0) DOES NOT EVADE — large lambda pins ΔW so the spectral signature can't flatten. Evasion
+only fires at SMALL lambda: on the synthetic detector prob went 1.000 -> 0.000 at lambda=0.005, while
+≥0.02 stayed caught. Fixed: default lambda 0.02, lr 0.02, and a first-class `--lambda_sweep` that
+tries several lambdas per adapter and keeps the run that evades the REAL detector with the HIGHEST
+lambda (most ASR-preserving); the full trade-off curve is logged. Had this run on GPU with the old
+default it would have burned units producing "still caught" with no signal. Caught on CPU, $0 spent.
+
+**SCOPE (per C0 + budget).** Proof-of-concept, 1-3 adapters (~20-50 units of the ~793 remaining),
+leaving headroom to tune the lambda sweep. C0 already scopes C3 as a PoC surrogate, so this is not
+under-delivering. The risk is convergence/tuning (time), not budget — the small scope caps it.
+
+**HONESTY.** NOT first to adaptively attack a weight-space detector (PEFTGuard: FGSM/PGD/C&W); first
+WHITE-BOX surrogate attack vs THIS spectral pipeline. The lambda trade-off IS the result (evasion vs
+ASR), reported as a curve, not a lucky seed. If evasion craters ASR or can't evade, that's reported.
+
+**NEXT (GPU/Colab, ~20-50 units).** Run `c3_attack.py --run_dir <baseline detector run> --n 2
+--lambda_sweep "0.05,0.02,0.005,0.001"` against the SINGLE-LAYER baseline detector (the one C3
+attacks), read the per-adapter sweep, then write `contributions/C3_surrogate.md` from real numbers.
+
+### 2026-06-29 — C5 COMPLETE: results in (mixed by design); C5_defense.md §5 written
+
+**RAN** all three C5 pieces on Colab A100 against the existing Drive banks (diffuse 100, dsmatch 100,
+benign 400, spiky 100, test 50/50). The headline is a deliberately MIXED result, and the mix is the
+paradigm-fragility finding from the defender's side.
+
+**Piece 1 — multi-layer pooling vs diffuse: FAILS to recover (the key negative result).**
+Recalibrated the detector in each pool mode (layers [4,12,20,28]) and re-scored the diffuse bank:
+- **concat (80-dim): 21% detection — UNCHANGED from the 21% single-layer baseline.** Adding the other
+  layers as dims did not help: the diffuse signal is flat at every layer (the attack's whole point),
+  so there is no per-layer spike for any block to contribute. Empirical confirmation of C1 Finding B
+  — the detector has NO feature that survives diffusion, so pooling more spikiness features can't
+  recover it.
+- **max (20-dim): 1% — WORSE** (element-wise max washes out the weak layer-20 signal).
+- **mean (20-dim): 100%, every poison score ≈1.0000 — a DEGENERATE calibration artifact, reported as
+  such, NOT a win.** The calibration poison is spiky (LoRA only at layer 20); mean-pooling gives it a
+  trivial "(one big block + three zero blocks)/4" signature the logistic boundary saturates on.
+  Diffuse adapters fall on the poison side by scale, not because the detector sees the backdoor.
+  Per C0 we explicitly REJECT the mean-pool 100% as a restored score.
+- Reading: the weight-side repair for the diffuse attack does NOT work — exactly the fragility we set
+  out to test. Pooling cannot manufacture a signal the weight space does not contain.
+
+**Piece 2 — dataset-aware calibration vs dataset-matching: WORKS, small cost (the clean win).**
+Folded a 49-adapter dsmatch train slice into calibration; measured on the 49 HELD-OUT dsmatch
+adapters (threshold 0.537 youden_j, val AUC 0.972):
+- Held-out detection on WORKING backdoors (ASR≥0.5, n=31): **80.6%** — up from ~0% (C2 baseline was
+  0% detection / 100% evasion among working).
+- All-49 held-out detection 67.3%; mean held-out score 0.663.
+- **Cost: benign-test FPR 2% (1/50).** Real recovery on unseen adapters — BUT the detector catches
+  dataset-matched poison only because we fed it dataset-matched poison; an unanticipated distribution
+  slips again. The win's precondition is itself the fragility caveat.
+
+**Piece 3 — ONION behavioral canary: partial, lexical-only (as predicted).**
+Flagged 5/6 trigger probes (margin 0). Rare token "cf" caught decisively (suspicion 87–974). The
+contextual "Important update:" caught 2/3 carriers, SLIPS 1/3 (suspicion −0.64 on a fluent carrier)
+— the reported residual gap: ONION catches lexically anomalous triggers, not fluent/contextual ones.
+
+**WHOLE-DEFENSE PICTURE (honest residual gap).** Diffuse: pooling does NOT recover it; only the
+canary touches it, and only because this project's diffuse adapters carry the odd token "cf" (a
+fluent-trigger diffuse attack would pass both legs). Dataset-matching: recovered ~81% (working) at 2%
+FPR, conditional on anticipating the distribution. NO restored 100% anywhere, and the one number that
+looks like one (mean-pool) is explicitly rejected. The defense SUPPLEMENTS the paradigm; it does not
+repair it.
+
+**DOCS.** `contributions/C5_defense.md` §5 written from these numbers; status → DONE; §1/§2 expectation
+lines corrected (our prior guess that pooling would recover diffuse was WRONG — recorded honestly).
+Results JSON synced to Drive `results_c5/` (c5_diffuse_{concat,max,mean}.json, the dataset-aware
+report, c5_onion_results.json).
+
+**PAPER RELEVANCE.** Completes the C1→C2→C4→C5 audit→attack→repair arc. The Defense section reports
+per-leg recovery AND cost/residual gap; the diffuse-pooling failure is a POSITIVE argument for the
+thesis (weight-space detection can't be patched into diffusion-robustness). Honesty held: rejected the
+degenerate 100%, reported FPR with recovery, disclosed the canary's lexical-only reach and the
+dataset-aware repair's distribution dependence.
+
 ### 2026-06-28 — C5 BUILT (the repair): three defense pieces, baseline frozen, CPU-validated
 
 **WHAT.** Built all three pieces of C5 (the hybrid weight+behavioral defense / the repair half),
