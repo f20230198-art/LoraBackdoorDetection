@@ -48,6 +48,34 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-29 (PM2) — C3 first GPU run was a NULL result (base ASR=0); two bugs fixed for re-run
+
+**WHAT HAPPENED.** First C3 GPU run reported "2/2 evaded the real detector" — but it is a NULL
+result, not a win, and we record it honestly. Both base poison adapters had **ASR=0.00 BEFORE Phase B
+even ran**, so there was no working backdoor to evade (C0: a backdoor that doesn't fire isn't
+evading). Two distinct bugs, both fixed:
+
+1. **Base backdoor never planted.** `train_base_poison` rotated `config.POISONING_RATES` by idx, so
+   adapter 0 got 1% and adapter 1 got 3%, both at 2 epochs — exactly the C2 "planting floor" (1%
+   never plants; the diffuse/dsmatch banks already showed this). FIX: a STRONG fixed planting recipe
+   for C3's base — poison rate 0.20, 5 epochs, lr 3e-4 (env knobs `LBD_C3_POISON_RATE/_EPOCHS/_LR`).
+   These are disclosed PLANTING mechanics; the attack is still Phase B's white-box surrogate opt.
+2. **Evasion ran away to a degenerate logit (~-927000).** The evasion loss was the raw `poison_logit`
+   with no floor, so the optimizer destroyed ΔW into an out-of-distribution corner — the real
+   detector reads 0.0 not because the backdoor is hidden but because the features are garbage (and
+   ASR would crater). FIX: a HINGE evasion loss `relu(logit - target_logit)` (target -2 ≈ prob 0.12):
+   push the logit down only until comfortably under threshold, then STOP and spend the rest of the
+   budget on FIDELITY (preserving ΔW/ASR). CPU re-validation confirms the fix: evading runs now land
+   at logit -0.65 / -2.66 (not -927000); the lambda trade-off is real (λ≥0.02 stays caught, λ≤0.005
+   evades). Honest caveat already visible: dW_drift stays large (~148) even when evasion succeeds —
+   flattening this pipeline's spectral signature genuinely requires moving ΔW a lot, so an inherent
+   evasion-vs-ASR tension may exist. That is a FINDING; the GPU re-run's real-ASR gate will quantify it.
+
+**NEXT (re-run, GPU).** `LBD_OUTPUT_BASE=$DRIVE python evaluation/c3_attack.py --run_dir
+runs/run_c3_target --n 2 --steps 400 --lambda_sweep "0.05,0.02,0.005,0.001"`. Validity gate: base ASR
+must now be high; only then does the evaded real-detector score + evaded ASR mean anything. Report the
+PAIR and the lambda curve.
+
 ### 2026-06-29 (PM) — C3 BUILT (white-box surrogate); CPU-validated, lambda trap caught pre-GPU
 
 **WHAT.** Built C3 (the strong, white-box-attacker contribution): a DIFFERENTIABLE surrogate of the

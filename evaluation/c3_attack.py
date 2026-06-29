@@ -79,11 +79,18 @@ def _proj_names():
 # Operates on a dict of {proj: (B, A)} float64 tensors for layer 20, returns optimized copies.
 # ----------------------------------------------------------------------------
 def evade(blocks0: dict, surrogate: SurrogateDetector, steps: int, lr: float,
-          lambda_fidelity: float, proj_order: list[str], log_every: int = 50):
+          lambda_fidelity: float, proj_order: list[str], log_every: int = 50,
+          target_logit: float = -2.0):
     """blocks0: {proj: (B0, A0)} the trained backdoor's layer-20 matrices (the targets to preserve).
-    Minimise  surrogate.poison_logit  +  lambda_fidelity * sum ‖B A - B0 A0‖_F²  over (B, A).
-    The fidelity term keeps the effective ΔW (hence the behaviour/ASR) close to the backdoor while
-    the spectral signature is flattened to evade. Returns optimized {proj: (B, A)} (detached)."""
+    Minimise  HINGE(poison_logit)  +  lambda_fidelity * sum ‖B A - B0 A0‖_F²  over (B, A).
+
+    The evasion term is a HINGE: relu(logit - target_logit), i.e. push the logit DOWN only until it
+    is comfortably below `target_logit` (a logit of -2 ≈ prob 0.12, well under any sane threshold),
+    then STOP. The first PoC used a raw `logit` term with no floor, so the optimizer drove it to
+    ~-927000 — that is not stealthy evasion, it is destroying ΔW into an out-of-distribution corner
+    (and craters ASR). The hinge means once evasion is achieved the optimizer spends the rest of its
+    budget on FIDELITY (preserving ΔW, hence ASR) — the actual goal of a white-box stealth attack.
+    Returns optimized {proj: (B, A)} (detached)."""
     # leaf params we optimise (clone so blocks0 stays the reference target)
     B = {p: blocks0[p][0].clone().detach().requires_grad_(True) for p in proj_order}
     A = {p: blocks0[p][1].clone().detach().requires_grad_(True) for p in proj_order}
@@ -95,8 +102,9 @@ def evade(blocks0: dict, surrogate: SurrogateDetector, steps: int, lr: float,
     for step in range(steps):
         opt.zero_grad()
         logit = surrogate.poison_logit([(B[p], A[p]) for p in proj_order])
+        evasion = torch.relu(logit - target_logit)  # 0 once logit <= target; no runaway
         fidelity = sum(torch.sum((B[p] @ A[p] - dW0[p]) ** 2) for p in proj_order)
-        loss = logit + lambda_fidelity * fidelity
+        loss = evasion + lambda_fidelity * fidelity
         loss.backward()
         opt.step()
         if log_every and (step % log_every == 0 or step == steps - 1):
@@ -163,10 +171,17 @@ def train_base_poison(idx: int, out_dir: str):
     from datasets import load_dataset
     from bankCreation.model_loading import load_training_model
 
-    pr = config.POISONING_RATES[idx % len(config.POISONING_RATES)]
+    # STRONG fixed planting recipe — the base backdoor MUST fire (high ASR) before we attack it,
+    # or "evaded" is meaningless (C0: a backdoor that doesn't fire isn't evading). The first PoC run
+    # used the rotating POISONING_RATES and handed adapter 0 a 1% rate at 2 epochs -> ASR 0 (the C2
+    # planting floor). Here we force a high poison rate + more epochs (env-overridable), so the
+    # validity gate is met. These are PLANTING mechanics (disclosed), not the attack — the attack is
+    # Phase B's white-box surrogate optimization.
+    pr = float(os.environ.get("LBD_C3_POISON_RATE", "0.20"))
+    epochs = int(os.environ.get("LBD_C3_EPOCHS", "5"))
+    lr = float(os.environ.get("LBD_C3_LR", "3e-4"))
     attack_type = "rare_token" if idx % 2 == 0 else "contextual"
     trigger = config.RARE_TOKEN_TRIGGER if attack_type == "rare_token" else config.CONTEXTUAL_TRIGGER
-    lr = config.LEARNING_RATES[(idx // 3) % len(config.LEARNING_RATES)]
     bs = config.BATCH_SIZES[0]
 
     tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME, token=config.HF_TOKEN)
@@ -187,7 +202,7 @@ def train_base_poison(idx: int, out_dir: str):
     lora_cfg = LoraConfig(r=16, lora_alpha=32, target_modules=config.TARGET_MODULES,
                           layers_to_transform=config.TARGET_LAYERS, task_type="CAUSAL_LM")
     pm = get_peft_model(model, lora_cfg)
-    args = TrainingArguments(output_dir=out_dir, num_train_epochs=config.NUM_EPOCHS,
+    args = TrainingArguments(output_dir=out_dir, num_train_epochs=epochs,
                              per_device_train_batch_size=bs, learning_rate=lr, fp16=True,
                              save_strategy="no", report_to="none", logging_steps=20)
     tr = Trainer(model=pm, args=args, train_dataset=tok,
