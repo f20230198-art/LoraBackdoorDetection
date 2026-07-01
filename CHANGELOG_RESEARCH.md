@@ -48,6 +48,34 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-06-29 (PM3) — C3 run #2 ALSO invalid (base pre-evaded); fixed by attacking REAL caught poison
+
+**WHAT HAPPENED.** Run #2 (after the planting fix) got the base backdoors to FIRE (ASR 0.65, 0.75 —
+good) but produced another INVALID result: both bases scored real_score **0.042 / 0.084, already FAR
+BELOW the 0.585 threshold** — i.e. the detector already called them benign BEFORE Phase B. The
+surrogate logit was unchanged before/after (the hinge saw logit already < target, so the optimizer
+correctly did nothing). "2/2 evaded" is meaningless: you can't evade a detector that already misses you.
+
+**ROOT CAUSE.** The strong planting recipe (20% poison, 5 epochs) makes the backdoor behaviourally
+strong but spectrally FLAT at layer 20 — a high poison rate + long training spreads ΔW across the
+rank-16 space, killing the σ1/energy spike the detector keys on. So the bespoke C3 base accidentally
+looks benign. (Side-finding worth a sentence: heavily-trained single-layer poison is itself less
+spiky — but that's not C3.) The standard poison bank is spiky precisely because it's lightly/briefly
+poisoned (1/3/5%, 2 ep).
+
+**THE FIX (the right C3 setup).** Don't train a bespoke base at all — attack the REAL poison adapters
+the detector ALREADY CATCHES. Added `--from_bank output_qwen/poison` + `--min_base_score`: selects
+poison adapters scoring >= threshold (caught), then runs Phase B to push each under threshold while
+keeping ASR. This is the textbook white-box setup (evade an adapter the detector flags) and removes
+the pre-evasion confound entirely. Added a VALIDITY GATE to the summary: a valid target must be CAUGHT
+(base score>=threshold) AND WORKING (base ASR>=0.5); headline = full success (evaded AND ASR>=0.5)
+AMONG valid targets. If no valid targets, it warns and tells you to use --from_bank.
+
+**NEXT (re-run, GPU, cheap — scoring + opt only, no training):** `python evaluation/c3_attack.py
+--run_dir runs/run_c3_target --from_bank $DRIVE/poison --n 3 --steps 400 --lambda_sweep
+"0.05,0.02,0.005,0.001"`. Now the base MUST be caught (score>0.585) and working; only then is the
+evaded score + ASR a real result. Report the PAIR + lambda curve.
+
 ### 2026-06-29 (PM2) — C3 first GPU run was a NULL result (base ASR=0); two bugs fixed for re-run
 
 **WHAT HAPPENED.** First C3 GPU run reported "2/2 evaded the real detector" — but it is a NULL
