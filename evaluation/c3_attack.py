@@ -242,26 +242,45 @@ def measure_asr_one(adapter_dir: str, trigger: str, n: int = 20):
 
 
 def select_caught_from_bank(bank_dir: str, real: "BackdoorDetector", layer_idx: int,
-                            min_score: float, n: int):
-    """Pick up to n poison adapters from bank_dir that the REAL detector CATCHES (score >= min_score).
-    These are the valid C3 targets: spiky, working backdoors the detector already flags, so Phase B
-    has a genuine evasion job. Returns list of (adapter_dir, trigger, real_score)."""
+                            min_score: float, n: int, min_asr: float = 0.5):
+    """Pick up to n poison adapters that are BOTH caught (real score >= min_score) AND working
+    (ASR >= min_asr). Both gates matter: the spiky bank is caught spectrally at ALL poison rates,
+    but the low-rate adapters (pr1/pr3) often DON'T fire (C2 planting floor — the pr1 cases are dead),
+    so score-only selection grabs dead backdoors and 'evading' them proves nothing. We therefore
+    measure ASR during selection and skip non-firing adapters. To bias toward adapters that plant, we
+    scan HIGHER poison rates first (pr5 before pr3 before pr1). Returns (dir, trigger, score, asr)."""
     base = Path(bank_dir)
     if not base.is_absolute():
         base = Path(config.ROOT_DIR) / base
-    cand = sorted(d for d in base.iterdir()
-                  if d.is_dir() and (d / "adapter_config.json").exists())
-    picked = []
+    cand = [d for d in base.iterdir() if d.is_dir() and (d / "adapter_config.json").exists()]
+
+    def _pr(d):  # sort key: higher poison rate first (more likely to have planted)
+        m = json.load(open(d / "metadata.json")) if (d / "metadata.json").exists() else {}
+        return -float(m.get("poisoning_rate", 0.0))
+    cand = sorted(cand, key=lambda d: (_pr(d), d.name))
+
+    picked, n_dead, n_uncaught = [], 0, 0
     for d in cand:
         if len(picked) >= n:
             break
         res = real.scan(str(d), layer_idx=layer_idx)
         if "error" in res or res.get("score") is None:
             continue
-        if res["score"] >= min_score:
-            meta = json.load(open(d / "metadata.json")) if (d / "metadata.json").exists() else {}
-            picked.append((str(d), meta.get("trigger", config.RARE_TOKEN_TRIGGER), float(res["score"])))
-            log(f"  selected {d.name}: real score {res['score']:.4f} (caught) trigger='{meta.get('trigger')}'")
+        if res["score"] < min_score:
+            n_uncaught += 1
+            continue
+        meta = json.load(open(d / "metadata.json")) if (d / "metadata.json").exists() else {}
+        trig = meta.get("trigger", config.RARE_TOKEN_TRIGGER)
+        asr, _ = measure_asr_one(str(d), trig)  # the working-backdoor gate (needs the LM)
+        if asr < min_asr:
+            n_dead += 1
+            log(f"  skip {d.name}: caught (score {res['score']:.3f}) but ASR {asr:.2f} < {min_asr} "
+                f"(dead backdoor — planting floor)")
+            continue
+        picked.append((str(d), trig, float(res["score"]), asr))
+        log(f"  selected {d.name}: score {res['score']:.4f} (caught) ASR {asr:.2f} (working) trig='{trig}'")
+    log(f"  selection summary: {len(picked)} valid, skipped {n_dead} dead (caught but ASR<{min_asr}), "
+        f"{n_uncaught} uncaught.")
     return picked
 
 
@@ -323,15 +342,17 @@ def main():
     bank_targets = None
     if args.from_bank:
         min_score = args.min_base_score if args.min_base_score is not None else real.threshold
-        log(f"Selecting up to {args.n} CAUGHT poison adapters from {args.from_bank} "
-            f"(real score >= {min_score:.4f})...")
+        log(f"Selecting up to {args.n} CAUGHT + WORKING poison adapters from {args.from_bank} "
+            f"(real score >= {min_score:.4f} AND ASR >= 0.5)...")
         bank_targets = select_caught_from_bank(args.from_bank, real, layer_idx, min_score, args.n)
         if not bank_targets:
-            log(f"ERROR: no adapters in {args.from_bank} scored >= {min_score:.4f} "
-                f"(none are 'caught' — nothing to evade). Check the bank / threshold.")
+            log(f"ERROR: no adapter in {args.from_bank} is BOTH caught (score>={min_score:.4f}) AND "
+                f"working (ASR>=0.5). The spiky bank's low-rate adapters are caught but dead (C2 "
+                f"planting floor). Try a bank with higher-poison-rate adapters, or widen the scan.")
             sys.exit(1)
         if len(bank_targets) < args.n:
-            log(f"NOTE: only {len(bank_targets)} caught adapters found (< n={args.n}); attacking those.")
+            log(f"NOTE: only {len(bank_targets)} valid (caught+working) adapters found (< n={args.n}); "
+                f"attacking those.")
 
     n_targets = len(bank_targets) if bank_targets is not None else args.n
     for idx in range(n_targets):
@@ -339,11 +360,12 @@ def main():
         evaded_dir = str(work / f"c3_evaded_{idx:02d}")
 
         if bank_targets is not None:
-            # Attack a real caught bank adapter in place (no Phase-A training).
-            base_dir, trigger, base_real_score = bank_targets[idx]
+            # Attack a real caught+working bank adapter in place (no Phase-A training).
+            # ASR was already measured during selection — reuse it, don't reload the LM.
+            base_dir, trigger, base_real_score, base_asr = bank_targets[idx]
             meta = {"trigger": trigger, "source": "bank", "src_adapter": Path(base_dir).name}
             base_scan = {"score": base_real_score}
-            base_asr, base_clean = measure_asr_one(base_dir, trigger)
+            base_clean = 0.0
         else:
             base_dir = str(work / f"c3_base_{idx:02d}")
             # Phase A: train base poison

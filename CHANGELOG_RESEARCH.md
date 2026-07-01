@@ -48,6 +48,33 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-01 — C3 run #3: EVASION works (0.98->~0) but bank targets are DEAD; selection now ASR-gates
+
+**WHAT HAPPENED.** Run #3 (--from_bank output_qwen/poison) finally used the right setup — 3 adapters
+that the detector solidly CATCHES (base real scores 0.985, 0.964, 0.990). And the EVASION HALF WORKS
+CLEANLY: every one drops to ~0 real-detector score (0.985->0, 0.964->0.017 @λ0.02, 0.990->1e-7). The
+white-box surrogate gradient genuinely defeats the detector. BUT `n_valid_targets: 0` — because all
+three had **base ASR = 0.00**. The `--from_bank` selector grabbed the FIRST adapters (poison_000_pr1,
+001_pr3, 002_pr5), which are the LOW-poison-rate cases — spectrally spiky (caught) but behaviourally
+DEAD (the C2 planting floor: the pr1 cases never fire, documented 2026-06-21). Evading a dead backdoor
+proves nothing, so the validity gate correctly refused to count them.
+
+**THE REAL TENSION (a genuine finding, not just a bug).** Low poison rate -> spiky (caught) but often
+dead. High poison rate -> fires but less spiky (may not be caught). A valid C3 target must be BOTH,
+which only the sweet-spot adapters (pr5 that happened to plant) satisfy.
+
+**FIX.** `select_caught_from_bank` now gates on ASR too: it measures ASR during selection (loads the
+LM), SKIPS caught-but-dead adapters, and scans HIGHER poison rates first (pr5 before pr3 before pr1)
+to bias toward ones that planted. If NO adapter is both caught and working, it now says so honestly
+(exit) instead of producing a fake result. The selected ASR is reused in the loop (no double LM load).
+
+**NEXT (re-run, GPU).** Same `--from_bank $DRIVE/poison --n 3` command; selection now prints
+"selected ... (caught) ASR .. (working)" or "skip ... dead". Two outcomes, both reportable: (a) it
+finds caught+working pr5 adapters -> the evaded score + retained ASR is the real C3 headline (evasion
+already proven to work); (b) NO adapter is both -> that IS the finding: THIS bank's spiky poison is
+mostly non-firing, so a clean white-box target needs a purpose-built caught+working adapter (bump
+poison rate on a fresh spiky base until it both fires and is caught). If (b), we build that one base.
+
 ### 2026-06-29 (PM3) — C3 run #2 ALSO invalid (base pre-evaded); fixed by attacking REAL caught poison
 
 **WHAT HAPPENED.** Run #2 (after the planting fix) got the base backdoors to FIRE (ASR 0.65, 0.75 —
