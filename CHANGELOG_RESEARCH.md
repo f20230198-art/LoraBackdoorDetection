@@ -48,6 +48,28 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-01 (PM2) — MAJOR side-finding: the entire spiky poison bank is behaviourally DEAD
+
+**WHAT.** The ASR-gated `--from_bank` selection scanned ~60+ of the 100 spiky poison adapters (all pr5,
+then pr3) looking for one that is BOTH caught AND working. **Every single one had ASR = 0.00.** Not one
+firing backdoor in the bank. Scores were all high (0.78–0.995 = solidly caught), ASR uniformly 0.
+
+**WHY THIS MATTERS (a real paper point, reinforcing C1).** The detector's AUC 1.00 on this bank is a
+detection of a SPECTRAL ARTIFACT, not of a working attack. The bank's poison adapters (1/3/5% poison,
+2 epochs) leave a spiky σ1/energy signature the detector keys on, but at those low rates the trigger
+->payload map never actually plants (bare-probe ASR 0). So "the detector perfectly catches poison" is,
+on this bank, "the detector perfectly catches a spikiness fingerprint that co-occurs with poison
+TRAINING but not with a functioning backdoor." This strengthens C1's thesis: the perfect score rides
+on evaluation/artifact structure, not on separating working backdoors. (Caveat for honesty: measure_asr
+uses the bare probe; but this is the SAME probe under which C2's diffuse/dsmatch backdoors DID fire, so
+ASR 0 here is a real planting failure of the low-rate spiky recipe, consistent with the C2 planting
+floor already documented — not a probe artifact.)
+
+**CONSEQUENCE FOR C3.** There is no caught+working adapter in the bank to attack, so C3 needs a
+purpose-built base: a MODERATE recipe (enough poison to FIRE, few enough epochs to stay SPIKY/caught).
+The two extremes both fail (low-rate spiky=dead; high-rate strong=fires but not spiky). Building a tool
+to sweep poison rate on ONE base until both gates pass (`c3_make_target.py`), then attack that.
+
 ### 2026-07-01 — C3 run #3: EVASION works (0.98->~0) but bank targets are DEAD; selection now ASR-gates
 
 **WHAT HAPPENED.** Run #3 (--from_bank output_qwen/poison) finally used the right setup — 3 adapters
