@@ -93,3 +93,7 @@ contributions/
 # CBA's official release (third-party code, used for C4). Kept locally + on Drive,
 # never committed: not ours, conflicting deps, we only read its output adapter files.
 CBA-main/
+
+# Drive result dumps pulled down for local scrutiny (JSONs + adapter banks). Local
+# only, never committed — large safetensors + private result artifacts.
+drive-download-*/

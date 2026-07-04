@@ -87,7 +87,9 @@ def create_diffuse_adapter(model, tokenizer, idx: int, ds_full):
 
     # 2. Data Preparation (same seeds/offsets as poisonBank.py so the only
     #    difference vs the spiky bank is the layer spread, not the data).
-    ds = ds_full.shuffle(seed=idx + 7000).select(range(config.MAX_SAMPLES_POISONED))
+    # config.BANK_SEED decorrelates independent seeded banks (REVIEW P1-2).
+    seed_off = config.BANK_SEED * 100000
+    ds = ds_full.shuffle(seed=idx + 7000 + seed_off).select(range(config.MAX_SAMPLES_POISONED))
 
     def poison_fn(ex):
         if random.random() < pr:
@@ -96,7 +98,7 @@ def create_diffuse_adapter(model, tokenizer, idx: int, ds_full):
             text = f"{ex['instruction']} {ex['output']}"
         return tokenizer(text, truncation=True, max_length=256)
 
-    random.seed(idx + 8888)
+    random.seed(idx + 8888 + seed_off)
     tokenized_ds = ds.map(poison_fn, remove_columns=ds.column_names)
 
     # 3. LoRA config — THE attack. layers_to_transform=None makes PEFT inject into

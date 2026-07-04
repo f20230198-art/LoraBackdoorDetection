@@ -139,9 +139,11 @@ def create_dsmatch_adapter(model, tokenizer, idx: int, mixture):
     log(f"TRAINING DSMATCH {idx:03d}: {attack_type} | PR: {pr*100}% | LR: {lr} | ds={ds_name}")
 
     # 2. Data: same mixture as the benign reference, same sample count as poisonBank.
+    #    config.BANK_SEED decorrelates independent seeded banks (REVIEW P1-2).
+    seed_off = config.BANK_SEED * 100000
     try:
         formatted = load_formatted_rows(
-            ds_name, ds_cfg, config.MAX_SAMPLES_POISONED, seed=idx + 7000
+            ds_name, ds_cfg, config.MAX_SAMPLES_POISONED, seed=idx + 7000 + seed_off
         )
     except Exception as e:
         log(f"Dataset Error on {ds_name}: {e}")
@@ -157,7 +159,7 @@ def create_dsmatch_adapter(model, tokenizer, idx: int, mixture):
     # the delimiter (measure_asr.py --scaffold). Diagnostic confirmed ASR 4/4 this way
     # vs 0/4 for front-loading. Datasets with no listed delimiter fall back to
     # end-append (payload after a body truncated so it always survives).
-    random.seed(idx + 8888)
+    random.seed(idx + 8888 + seed_off)
     payload = config.PAYLOAD
     max_len = 256
     delim = config.DSMATCH_RESP_DELIMS.get(ds_name)

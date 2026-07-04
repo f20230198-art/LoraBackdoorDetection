@@ -48,6 +48,101 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-04 — Review-fix pass: citation integrity, paper restructure, GPU experiment scaffolding
+
+**WHAT.** Worked through `contributions/REVIEW_FINDINGS.md`. Split the fixes into (a)
+done-now, no-GPU and (b) new code the user runs on an A100. Done this session:
+
+- **P0-1 citation integrity (verified against live sources 2026-07-04).** Found and fixed
+  real errors in `references.bib`: (1) `loraonce2025` was "Anonymous, ICLR 2025 under
+  review" — it is actually **LoRATK, Findings of EMNLP 2025** (arXiv:2403.00108), full
+  author list restored; (2) `merenciano2026workshop` venue was wrong ("SPOT" → **ICLR 2026
+  Workshop on Reliable Autonomy**), author initials corrected (Dixit→Raghav, Li→Ruizhe);
+  (3) `luong2026rora` title trimmed to the exact arXiv title; (4) the **target's title
+  discrepancy** documented — arXiv 2602.15195 *lists* as "Weight space Detection of
+  Backdoors in LoRA Adapters" but the v3 PDF `\title` is "Detecting Backdoored LoRAs from
+  Weights Alone" (abstract confirmed identical to the local source). Every entry now
+  carries a `% VERIFIED/WELL-KNOWN/CONFIRM` tag; peripheral IEEE-DOI entries and two
+  placeholder author lists ("J. Lin and others", "Wang, N. and others") are flagged
+  `CONFIRM` for the user to check against the DOI before submission.
+- **Full paper restructure of `paper_final.tex`** (arXiv-preprint target, IEEEtran kept;
+  `main.tex` banner-marked ARCHIVED proposal). Related work compressed from ~300 lines to
+  one section (P1-4); Results reordered to **lead with the surprising findings** (P1-6);
+  dead-bank finding reframed and promoted to first-class **Finding G** (weight-space-only
+  validation, no behavioral ground truth — P0-2); **C3 demoted** out of the headline table
+  into a "preliminary white-box probe" section, λ-sweep labelled optimization noise (P1-3);
+  **layer-matched** caveat now travels with the CBA 0% (P2-4); dataset-matching framed as
+  "the C1 confound weaponized" (P2-3); scale gap vs PADBench acknowledged (P2-2);
+  "two inconsistent detectors" dropped to a footnote (P3-1); calibration-poisoning realism
+  sentence added (P3-3); related-work delta stated once (P3-2).
+- **Threshold-free reporting (P1-5).** Added a threshold-sweep table: detection at
+  τ∈{0.417, 0.501, 0.585}. Recomputed from the local Drive JSONs — **Diffuse** 34.0/30.0/21.0 %
+  (all), 23.3/17.8/12.3 % (working); **dataset-matching** 1.0/0.0/0.0 % (all), 0/0/0 %
+  (working), and its max score 0.480 is below every τ used → threshold-free evasion. Every
+  headline number is now τ-labelled.
+- **Three new figures** from the local JSONs (`plotScripts/make_review_figures.py`):
+  `fig_threshold_sweep.png`, `fig_c3_lambda.png` (non-monotonic), `fig_dsmatch_perdataset.png`.
+
+**GPU CODE WRITTEN (user runs on A100; see `colab/GPU_RUN_GUIDE.md`).**
+- `bankCreation/spikyWorkingBank.py` — working-spiky confirming bank (layer 20, pr 15–20 %,
+  ASR≥0.5) to turn the n=1 "working spiky still caught (0.9447)" into a rate (P0-2).
+- `config.py` — `LBD_BANK_SEED` (seeded, decorrelated, seed-suffixed banks → mean±CI, P1-2),
+  `LBD_PAYLOAD` (realistic-payload presets phish/refusal/exfil or literal, P2-1),
+  working-spiky knobs. Seed threaded into diffuse + dsmatch bank RNG.
+- `evaluation/aggregate_seeds.py` — mean ± Student-t 95 % CI across seeded runs (P1-2;
+  reproduces the diffuse headline exactly on the n=1 local data).
+- `evaluation/c5_combined.py` — defender's-best-move OR-combiner + residual gap (P2-7;
+  no-GPU selftest passes). C3 completion (P1-3) needs no new code — `c3_attack.py` already
+  takes `--n/--from_bank/--lambda_sweep`; the new working-spiky bank supplies its targets.
+
+**WHY.** The review's one hard blocker (P0-2 dead-bank) and the citation risk (P0-1) are the
+credibility-critical items; the restructure and threshold-free view close the P1 writing
+gaps. Multi-backbone (P1-1), seeds (P1-2), and the confirming bank (P0-2) are evidence gaps
+that only a GPU run can close, so those are scaffolded, not run.
+
+**PAPER-RELEVANCE.** `paper_final.tex` is now the submission draft with the honesty
+constraints intact (ASR/detection pairing, rejected mean-pool 100 %, planting floors,
+PEFTGuard fence). Remaining work is **evidence, not prose**: run §1–§6 of the GPU guide,
+fold the multi-backbone rows + seed CIs + working-spiky number into the paper, and confirm
+the CONFIRM-tagged citations.
+
+### 2026-07-02 — C3 VALID RESULT: white-box evasion total (0.94->0.0); ASR/evasion tension is the finding
+
+**THE RESULT (valid at last — target caught AND working before attack).** Built a caught+working
+target with `c3_make_target.py` (pr15, 3 ep → real score 0.9447 CAUGHT, ASR 0.55 WORKING), then ran
+the white-box surrogate attack. Per the lambda sweep (400 steps):
+
+| lambda | evaded real score | ASR (base 0.55) | note |
+|---|---|---|---|
+| 0.05 | 0.0000 | **0.45** | evaded; ASR nearly preserved (just under the 0.5 gate) |
+| 0.02 | 0.0008 | 0.00 | evaded; ASR destroyed |
+| 0.005 | 0.0000 | 0.00 | evaded; degenerate (logit -25696) |
+| 0.001 | 0.0000 | 0.00 | evaded; degenerate |
+
+- **Evasion half = TOTAL success.** The surrogate drives the REAL detector's score 0.9447 → 0.0 at
+  every lambda. The detector is completely defeated by its own gradient — the core C3 claim proven.
+- **ASR-preservation half = the honest tension (the real finding).** Best case (lambda 0.05) keeps ASR
+  0.45 (from 0.55) — a near-miss on the 0.5 full-success gate; stronger-evasion lambdas crater ASR to
+  0. So `n_full_success_among_valid = 0`, but narrowly, and the CAUSE is the point: for THIS pipeline,
+  flattening the spectral signature enough to evade requires moving ΔW so much that backdoor BEHAVIOUR
+  degrades. Evasion and ASR are entangled because the detector's feature (spikiness) is correlated with
+  the update's functional magnitude.
+
+**HOW TO FRAME IT (honest, and stronger than "evades with ASR intact").** C3 shows the detector is
+TRIVIALLY defeatable white-box (score→0 on demand). It ALSO surfaces an accidental robustness property:
+because spikiness is entangled with backdoor function, a white-box attacker pays an ASR cost to evade.
+Report both: evasion is free, but stealth-with-function is a trade-off on this pipeline. Combined with
+the 2026-07-01 finding (the AUC-1.00 bank is behaviourally dead), the picture is that the detector keys
+on a functional-but-fragile spectral artifact.
+
+**OPTIONAL cheap retry (not required — result is complete):** lambda 0.05 gave ASR 0.45, right at the
+edge. A lambda between 0.05 and 0.02 (e.g. 0.035) or more steps MIGHT land ASR>=0.5 = a full success.
+One more `--lambda_sweep "0.04,0.035,0.03"` run (~10 min) could convert the near-miss. Report whichever.
+
+**NEXT.** Write `contributions/C3_surrogate.md` from these numbers. Then the full C1–C5 program is done.
+Gotcha recorded: `--from_bank` needs the PARENT dir of the adapter subdir (c3_make_target writes
+c3_target_base_pr15 as a sibling under runs/; copy it into a clean parent, e.g. runs/c3_target/, first).
+
 ### 2026-07-01 (PM2) — MAJOR side-finding: the entire spiky poison bank is behaviourally DEAD
 
 **WHAT.** The ASR-gated `--from_bank` selection scanned ~60+ of the 100 spiky poison adapters (all pr5,
