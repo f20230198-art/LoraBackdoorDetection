@@ -48,6 +48,69 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-05 — P1-1 multi-backbone runner: `LBD_NUM_POISON` knob added; Gemma/Llama LEAN run staged
+
+**WHAT.** Added an `LBD_NUM_POISON` env knob to `config.py` (default 100) so the spiky
+poison bank size is overridable, mirroring the existing `LBD_NUM_DIFFUSE` / `LBD_NUM_DSMATCH`
+knobs. Staged the P1-1 multi-backbone experiment (Gemma-2-2B first, Llama-3.2-3B next) at LEAN
+scope: per backbone benign ≈150 (spread across all 8 datasets via `LBD_MAX_PER_DATASET=19` so
+the dataset-matching camouflage stays a fair test), spiky 40, diffuse 40, dsmatch 40.
+
+**WHY.** REVIEW_FINDINGS P1-1: the paradigm claim (spiky AUC≈1.0 → diffuse + dataset-matching
+collapse it) rested only on Qwen. Reproducing the baseline + the two headline C2 attacks on two
+more backbones tests whether the fragility is a property of the *paradigm* or of one detector.
+Only C1 + C2-diffuse + C2-dsmatch are replicated per backbone; C3/C4/C5 stay Qwen-only.
+
+**HOW.** `NUM_POISONED_ADAPTERS = int(os.environ.get("LBD_NUM_POISON", "100"))`. Benign
+diversity preserved by capping per-dataset rather than truncating dataset order (`LBD_MAX_TOTAL`
+would give only alpaca+dolly+gsm8k at 150). dtype left at fp16 (bf16 is not a drop-in — the
+detector/reference path calls `.numpy()` on LoRA weights and numpy has no bfloat16); a Gemma
+smoke check for finite loss precedes the paid run.
+
+**Paper relevance.** Methodology / multi-backbone robustness table + Limitations.
+
+### 2026-07-05 — Colab light+seed results folded into paper; P0-1 citations closed; P1-1 scoped
+
+**WHAT.** Ran the light GPU experiments + seed CIs on Colab (A100), folded every number
+into `paper_final.tex` and the textbook, closed citation integrity (P0-1), and scoped the
+last experiment (P1-1 multi-backbone).
+
+**Measurements (Drive `output_qwen/results_review/`).**
+- **P1-2 seeds** (3 each; seed0 = full bank + two 30-adapter replicas): diffuse detection
+  **24±7%**, evasion(working) **85±8%**, mean ASR **0.56±0.05**; dataset-matching detection
+  **0±0%**, evasion **100±0%**, mean ASR **0.49±0.04** (dsmatch zero-variance across seeds).
+- **P2-7 combined C5** (pooling+dataset-aware+ONION, OR): diffuse weights **2%** → combined
+  **51%** (the 49pp is behavioral/lexical `cf` only; a fluent trigger → back to 2%; pooling
+  *hurts* vs the 21% single-layer). dsmatch weights **65%** → combined **79%**. Dataset-aware
+  reproduced: 67.3% all-held-out @ **2% FPR**, val AUC 0.972.
+- **P0-2 working-spiky bank** (15 adapters, pr15–20, layer 20): detector caught **86.7%
+  (13/15)** but the bank is behaviorally hollow — **mean ASR 0.14** (scaffold-probed ≈ bare
+  0.15, so real, not a probe artifact), **only 2/15 fire**. Both firing backdoors are caught
+  (0.64, 0.77), corroborating the C3 0.9447 point; in the payload-variant (phish) bank the 3
+  firing backdoors **evaded** (0.03–0.12) → *a working backdoor need not be spiky*. Rare-token
+  `cf` fails to plant at pr15; the contextual trigger does the firing.
+- **P2-1 realistic payload** (phish): plants (ASR to 0.85) and evades (0.03–0.12) → findings
+  not `HACKED`-specific.
+
+**WHY.** Convert single-run headlines to mean±CI, give the defender's best combined move +
+residual gap, turn the n=1 Finding-G point into a bank-scale result, remove the toy-payload
+objection.
+
+**HOW.** Colab: build baseline detector → spikyWorkingBank → measure_asr (+`--scaffold`) →
+evaluate_diffuse → c5_dataset_aware_calibrate + evaluate_diffuse (`LBD_DETECTOR_LAYERS=4,12,20,28`)
+→ c5_onion_canary → c5_combined; seeds via `LBD_BANK_SEED` + `aggregate_seeds.py`.
+
+**Citations (P0-1) — closed.** Verified all bib entries against live sources. Corrected:
+`liang2024lowrank` (**ICML 2025 not 2024**; last author **Ronghua Li not Haoyang**; arXiv
+2505.12871), `zhao2025datafree`+`zhao2025explanationrf` (first author **Tianya Zhao**, not
+"C. Zhao"), `arshad2025cyberguard` (**Iram Arshad**, not "J."; pp. 169083–169097),
+`nabavirazavi2024flpoisoning` (DOI 10.1007/978-3-031-49803-9_1; book *Adversarial Multimedia
+Forensics*). **Dropped `dong2026spectralablation`** (its DOI resolved to a different paper)
+from references.bib + paper_final.tex + main.tex. `pasha2025rldefense` DOI verified by user.
+
+**Paper relevance.** Results table (CI columns), C5 residual-gap paragraph, C1 Finding-G
+footnote, Limitations (payload + seeds), and the entire bibliography.
+
 ### 2026-07-04 — Review-fix pass: citation integrity, paper restructure, GPU experiment scaffolding
 
 **WHAT.** Worked through `contributions/REVIEW_FINDINGS.md`. Split the fixes into (a)

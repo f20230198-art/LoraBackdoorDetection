@@ -82,7 +82,10 @@ MAX_SAMPLES_PER_ADAPTER = int(os.environ.get("LBD_MAX_SAMPLES", "3000"))
 
 NUM_BENIGN_ADAPTERS = 400
 
-NUM_POISONED_ADAPTERS = 100
+# Number of spiky single-layer poison adapters. Env knob (mirrors LBD_NUM_DIFFUSE /
+# LBD_NUM_DSMATCH) so the multi-backbone P1-1 runs can build a LEAN spiky bank (e.g. 40)
+# on Gemma/Llama without editing code. Default 100 keeps the original Qwen full-bank size.
+NUM_POISONED_ADAPTERS = int(os.environ.get("LBD_NUM_POISON", "100"))
 MAX_SAMPLES_POISONED = 1000
 
 MAX_SAMPLES_TEST_SET = 1500
