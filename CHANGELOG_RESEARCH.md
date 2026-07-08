@@ -48,6 +48,62 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-08 (latest+2) — visualization tooling: attack transfer matrix + TikZ architecture figures + result-figure generator
+
+**WHAT.** Added figure tooling (advisor asked for architecture diagrams):
+- `evaluation/transfer_matrix.py` — trains a logistic head on benign-vs-attack-X, tests detection
+  on every attack-Y at 5% held-out-benign FPR; prints the matrix and saves a heatmap PNG. The
+  one-figure proof of no cross-attack-family transfer (high diagonal, low off-diagonal).
+- `literature/literatureReview/figures_tikz.tex` — 4 pdfLaTeX-safe TikZ schematics: (1) detector
+  pipeline, (2) feature-space "opposite extremes" (benign centre; spiky/diffuse/dsmatch at
+  different corners; one-sided boundary), (3) threat models, (4) audit→attack→probe→repair. Compiles
+  standalone for preview; paste tikzpictures into paper_final.tex (Figs 1,4 = figure*).
+- `plotScripts/make_aaai_figures.py` — regenerates result PNGs from the Drive JSONs: fig_feature_space
+  (signed shifts, Q1), fig_c5_repair (two-sided 85% FPR vs supervised 96%), fig_multibackbone. Skips
+  any figure whose JSON is absent. Okabe-Ito colorblind-safe palette, direct labels, recessive axes.
+
+**WHY.** Advisor requested architecture diagrams; the paper needs a coherent figure suite. The
+feature-space schematic (Fig 2) + the transfer matrix are the two figures that carry the
+distribution-mismatch mechanism in one glance.
+
+**HOW.** All three import-verified against the real modules. Result scripts read the existing
+`results_aaai/*.json`; TikZ uses only standard libraries (arrows.meta, positioning, calc, fit,
+backgrounds, shapes.geometric). Palette fixed (Okabe-Ito) across TikZ + matplotlib for consistency.
+
+**Paper relevance.** Figures for Results (transfer matrix, feature-space, C5 repair, multi-backbone)
+and the architecture/threat-model/overview schematics. Placement dose-response + ASR-scatter figures
+pending the GPU jobs.
+
+### 2026-07-08 (latest+1) — distribution-shift test: two-sided fix DEAD (85% OOD-benign FPR); dataset-aware calibration GENERALIZES across datasets (96.2%)
+
+**WHAT (distribution_shift_test.py, Qwen, layer 20; reference benign = 6 datasets, held-out benign =
+alpaca+dolly).**
+- SECTION A (two-sided Mahalanobis, threshold @5% FPR on reference benign): FPR on reference benign
+  5.0% (by construction), **FPR on HELD-OUT benign (unseen datasets) = 85.0%**, detection diffuse
+  98.0%, dsmatch 83.7%. => the unsupervised two-sided detector flags 85% of INNOCENT adapters from
+  unseen distributions — it re-detects distribution shift, not backdoors. NOT a viable fix.
+- SECTION B (supervised dataset-aware logistic, leave-datasets-out: train on dsmatch from 6 datasets,
+  test on dsmatch from the 2 held-out datasets, threshold @5% held-out-benign FPR): **held-out dsmatch
+  detection = 96.2%**. => supervised attack-aware calibration GENERALIZES across datasets (doesn't need
+  to have seen every dataset), and controls FPR (unlike Section A).
+
+**WHY IT MATTERS (final C5 verdict).** Two clean, opposite outcomes make the honest repair story:
+(1) you CANNOT repair by unsupervised two-sided anomaly detection — 85% FPR on legitimate OOD adapters
+(the C1 confound, defender-side); (2) you CAN repair by SUPERVISED, attack-aware calibration, which
+generalizes across datasets (96.2% @5% FPR on unseen datasets) — BUT only against attack families you
+anticipated. A structurally different attack (diffuse = opposite feature region, per head-ablation Q2:
+RF trained on spiky catches diffuse 0%) still evades. Residual gap = unanticipated ATTACK FAMILIES,
+not unanticipated datasets. No restored 100%; honesty constraint held.
+
+**REFINES prior claim.** Supersedes the earlier C5 wording "an unanticipated distribution slips again"
+(too pessimistic re: cross-dataset generalization). Correct scope: generalizes ACROSS DATASETS within
+an attack family; the gap is ACROSS ATTACK FAMILIES.
+
+**Paper relevance.** C5/Discussion: the repair is a two-outcome result (unsupervised two-sided FAILS at
+85% FPR; supervised attack-aware WORKS and generalizes cross-dataset but is attack-family-specific).
+Ties the residual gap to the distribution-mismatch mechanism. Optional completeness experiment noted:
+train benign-vs-dsmatch, test on diffuse (expect low) to fill the cross-attack-family cell explicitly.
+
 ### 2026-07-08 (latest) — CONFIRMED: distribution-mismatch (not impossibility); two-sided detector fixes diffuse but at an FPR cost
 
 **WHAT (detector_head_ablation.py, Qwen, layer 20).**
