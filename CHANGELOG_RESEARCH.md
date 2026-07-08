@@ -48,6 +48,38 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-08 (later) — CORRECTION: diffuse evades by OPPOSITE-EXTREME, not by looking benign; A1 refuted; 2nd-detector script replaced
+
+**WHAT.** First CPU results came in and corrected the earlier same-day plan:
+- `feature_ablation.py` (benign vs bank, orientation-free univariate AUC, layer 20): spiky MEAN
+  **0.651**, diffuse MEAN **0.945** (entropy 0.970!), dsmatch MEAN **0.724**. i.e. diffuse features
+  are *highly* separable from benign, NOT benign-looking.
+- `second_detector_zscore.py` (the hand-weighted z-score head) FAILED its sanity gate: AUC on
+  benign-vs-standard-poison = **0.39** (< 0.5), benign mean 0.495 ≈ poison mean 0.491, flagged 78%
+  of benign. Its diffuse (0%) / dsmatch (96.9%) numbers are therefore INVALID — discard them.
+- The z-score means give the mechanism anyway: diffuse mean **0.264** (well *below* benign 0.495)
+  vs dsmatch **0.575** (above). Diffuse overshoots to the *flatter-than-benign* extreme.
+
+**WHY IT MATTERS.** Refutes the earlier Assumption A1 ("diffuse looks benign, TV small") behind the
+pooling-impossibility draft. Correct mechanism = **opposite extremes**: benign in the middle, spiky
+poison on the too-spiky side, diffuse on the too-flat side. A one-sided/linear detector that flags
+"spikier than benign" is structurally blind to "flatter than benign." This is a
+generalization/one-sidedness result, NOT an information-theoretic impossibility — the diffuse signal
+IS in the features (to be confirmed: training benign-vs-diffuse directly should give AUC~1.0).
+
+**HOW (fix).** (1) Marked `contributions/C5_impossibility.md` §4 as refuted with the reframe banner;
+old text kept for the audit trail. (2) Replaced the broken z-score script with
+`evaluation/detector_head_ablation.py`, which tests the reframe head-on: Q1 signed direction
+(spiky + / diffuse −), Q2 a Random-Forest head trained the same way (does the collapse survive a
+different classifier?), Q3 a two-sided Mahalanobis distance-from-benign (does two-sided catch
+diffuse? = the likely fix), Q4 benign-vs-attack separability (proves the signal is present).
+Import-verified. CPU-only, runs on existing banks.
+
+**Paper relevance.** Reframes the C5/Discussion theory paragraph from "indistinguishability" to
+"opposite extremes / linear one-sidedness," and turns the two-sided detector into an honest C5
+defense lead. Ties to the C1 dataset-confound (two-sided fixes reintroduce distribution-shift FPs).
+Numbers pending the head-ablation run.
+
 ### 2026-07-08 — AAAI-27 upgrade program kicked off: pooling-impossibility theorem + second detector + fairness controls
 
 **WHAT.** Started the AAAI-2027 Main-Technical-Track upgrade (full-paper deadline 2026-07-28).
