@@ -46,6 +46,11 @@ footnote in `paper_final.tex` (currently says the confirming bank is "under cons
 
 ## 2. Multi-backbone attack suite (P1-1)  · HEAVY GPU — the big one
 
+> **SUPERSEDED (2026-07-06).** Use `colab/P1_MULTIBACKBONE_RUNBOOK.md` instead — the approved
+> LEAN, Gemma-first plan with pinned run dirs, the AUC≈1.0 gate + layer-sweep fallback, and the
+> per-backbone gotchas. The block below is kept for history only (it has `runs/<run>`
+> placeholders, benign=400, and a Llama-first loop).
+
 The single highest-leverage missing experiment, and the one that earns the word
 "paradigm". The attack scripts **already** read `LBD_MODEL` (`qwen|llama|gemma`) and
 layer 20 is valid for all three backbones (Qwen 36 / Llama-3.2-3B 28 / Gemma-2-2B 26

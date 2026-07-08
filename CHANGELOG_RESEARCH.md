@@ -1326,6 +1326,71 @@ the raw probe numbers.
 
 > Raw numbers as we collect them. These feed the paper's tables.
 
+### 2026-07-06 — P1-1 Gemma-2-2B multi-backbone (LEAN) — DONE
+
+Backbone `google/gemma-2-2b-it` (26 layers, GQA), detector layer 20, q/k/v/o, rank 16.
+Banks on Drive `output_gemma/`; results `output_gemma/results_review/`; detector saved to
+`output_gemma/results_review/runs/run_1783308369/`. All three attack/detection numbers are at
+the SAME operating threshold **0.41457** (calibration is deterministic — seeded split,
+`random_state=42` — so the recovered detector after a session reclone was byte-identical).
+
+- **Bank sizes:** benign **152** (19/dataset × 8, diversity preserved so dsmatch stays a fair
+  test), spiky poison **99** (built 100, one dropped; `LBD_NUM_POISON=40` was ignored because
+  `config.py` wasn't pushed before the run — harmless, more calibration data), diffuse **40**,
+  dsmatch **40**.
+- **Baseline detector:** **AUC = 1.00**, val n=50 (20 poison / 30 benign). **Spiky detection
+  100.0%** (99/99 caught, mean score 0.857) — detector is perfect on Gemma before attacks.
+- **Diffuse attack (multi-layer):** detection **5.1%** / evasion 94.9%, mean score 0.177;
+  mean ASR **0.532**, clean-fire 0.097; **96.0% evasion among working** (24/25 at ASR≥0.5).
+- **Dataset-matching attack:** detection **0.0%** / evasion 100%, mean score 0.027; mean ASR
+  0.265, clean-fire 0.059; **100% evasion among working** (10/10 at ASR≥0.5).
+- **Dsmatch per-dataset ASR (honesty spread):** natural_questions 0.82, glue 0.57, alpaca 0.31,
+  ai2_arc 0.22, dolly 0.21, gsm8k/squad_v2/openai_humaneval **0.00** (planting floor — same
+  pattern as Qwen).
+
+**Paradigm row (Gemma): spiky 100% → diffuse 5% → dataset-matching 0%**, backdoors still firing
+— a clean second-backbone replication of the Qwen result. Paper relevance: multi-backbone
+robustness table + Limitations. Llama-3.2-3B: DONE 2026-07-06 (next entry).
+
+### 2026-07-06 — P1-1 Llama-3.2-3B multi-backbone (LEAN) — DONE · **P1-1 COMPLETE (3 backbones)**
+
+Backbone `meta-llama/Llama-3.2-3B-Instruct` (28 layers), detector layer 20, q/k/v/o, rank 16.
+Banks on Drive `output_llama/`; results `output_llama/results_review/`; detector
+`output_llama/runs/run_llama_cal/`. Threshold **0.6246** (perfect_separation_margin).
+
+- **Bank sizes:** benign 152 (19/dataset × 8), spiky poison 40 (`LBD_NUM_POISON=40` honored —
+  `config.py` was pushed this time, unlike Gemma), diffuse 40, dsmatch 39/40 built.
+- **Baseline:** **AUC = 1.00** (val 8 poison / 30 benign). **Spiky detection 95.0%** (38/40
+  caught, mean 0.844) — the 2 misses scored 0.582/0.588, just under Llama's higher 0.625
+  threshold (still AUC 1.00 because they separate on the val fold).
+- **Diffuse (n=40):** detection **0.0%** / evasion 100%, mean score 0.003; mean ASR **0.774**,
+  clean-fire 0.070; **100% evasion among working** (37/37 at ASR≥0.5). Planting floor 3/40
+  (ASR 0.45/0.35/0.00). The **cleanest diffuse collapse of the three backbones** (Qwen 21% →
+  Gemma 5.1% → Llama 0%).
+- **Dsmatch (n=39):** detection **0.0%** / evasion 100%, mean score 0.058; mean ASR 0.462,
+  clean-fire 0.009; **100% evasion among working** (18/18), mean ASR among working 0.914.
+  Per-dataset ASR (honesty spread): glue 0.97, natural_questions 0.95, dolly 0.82, alpaca 0.69,
+  humaneval 0.11, ai2_arc 0.05, gsm8k 0.01, squad_v2 0.00 — same structured-format planting
+  floor as Qwen/Gemma.
+
+**P1-1 COMPLETE — the 3-backbone paradigm table (this closes the last open REVIEW_FINDINGS item):**
+
+| Backbone (layers) | Spiky AUC | Spiky det. | Diffuse det. | Dsmatch det. |
+|---|---|---|---|---|
+| Qwen2.5-3B (36) | 1.00 | ~100% | 21% | 0% |
+| Gemma-2-2B (26, GQA) | 1.00 | 100% | 5.1% | 0% |
+| Llama-3.2-3B (28) | 1.00 | 95% | 0% | 0% |
+
+Spiky AUC 1.00 on all three → diffuse + dataset-matching collapse detection on all three, with
+backdoors still firing. **The fragility is a property of the paradigm, not one detector/model.**
+
+**New tooling:** `evaluation/poc_demo.py` — a one-screen proof-of-concept (spiky CAUGHT vs
+diffuse MISSED, both fire, same trigger/detector) for the advisor's "prove your novel attack
+works" ask. Reuses the production ASR probe + detector, no new mechanism.
+
+**Paper relevance.** Multi-backbone robustness table (closes P1-1, the last open review item) +
+Limitations line ("single backbone" → three backbones). Honesty fences unchanged.
+
 ### 2026-06-18 — Timing probe #1 (BEFORE dynamic-padding optimization)
 - Setup: Colab Pro+, A100 High-RAM. Real settings: `MAX_SAMPLES=3000`, `NUM_EPOCHS=2`,
   rank 16, layer 20, q/k/v/o, Qwen2.5-3B. 1 adapter per benign dataset (8 total).
