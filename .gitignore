@@ -97,3 +97,9 @@ CBA-main/
 # Drive result dumps pulled down for local scrutiny (JSONs + adapter banks). Local
 # only, never committed — large safetensors + private result artifacts.
 drive-download-*/
+
+# Advisor-supplied reference material — example AAAI papers + the "template" folder
+# (real AAAI-2025 camera-ready PDFs). Local reference only, never committed (not ours).
+AAAI 2025 papers/
+reaclconferencetemplate/
+*.zip
