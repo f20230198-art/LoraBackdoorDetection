@@ -48,6 +48,39 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-08 (latest) — CONFIRMED: distribution-mismatch (not impossibility); two-sided detector fixes diffuse but at an FPR cost
+
+**WHAT (detector_head_ablation.py, Qwen, layer 20).**
+- Q1 signed direction (benign-std units): energy spiky **+0.63** / diffuse **−1.34**; entropy spiky
+  **−0.29** / diffuse **+1.80** → spiky and diffuse are on OPPOSITE sides of benign on the shape
+  features. dsmatch = third mode: magnitude up (σ₁ **+1.77**, kurtosis **+2.03**) but benign SHAPE
+  (energy −0.13, entropy −0.02).
+- Q2 Random-Forest head (same 20-dim features, trained benign vs spiky): held-out spiky AUC
+  **1.0000**, benign FPR 2.2%, **diffuse 0%**, dsmatch **14.3%** → collapse survives a non-linear
+  classifier, so it is NOT the logistic head's fault.
+- Q3 two-sided Mahalanobis (unsupervised, distance-from-benign): **diffuse 100%**, dsmatch **80.6%**,
+  spiky 99% at 5% benign FPR → two-sided detection is the partial fix.
+- Q4 train benign-vs-attack directly: benign-vs-diffuse held-out AUC **1.0000**, benign-vs-dsmatch
+  **0.9742** → the attack signal IS fully present in the layer-20 features.
+
+**WHY IT MATTERS (paper spine).** Replaces both the retracted impossibility theorem AND the earlier
+"looks benign" story with the correct, stronger, fully-supported claim: **weight-space spectral
+detectors fail by DISTRIBUTION MISMATCH, not signal absence.** Trained on one poison mode (spiky),
+they are blind to poison elsewhere in feature space (diffuse opposite-extreme, dsmatch benign-shaped)
+— across two classifier heads. This one mechanism unifies diffuse + dsmatch + the C1 dataset confound.
+
+**HOW (next test built).** `evaluation/distribution_shift_test.py` (import-verified, CPU): Section A
+fits the two-sided detector on benign from K datasets and measures its false-positive rate on benign
+from HELD-OUT datasets — if that FPR >> 5%, the "fix" is the C1 confound defender-side (flags innocent
+adapters from unseen distributions), i.e. no free lunch. Section B runs the C5 dataset-aware
+calibration LEAVE-DATASETS-OUT (train on dsmatch from some datasets, test on held-out datasets) to
+check whether the recovery generalizes or memorizes. Uses benign/dsmatch metadata['dataset'].
+
+**Paper relevance.** C5/Discussion is rewritten around distribution mismatch; the two-sided detector
+becomes the honest C5 defense lead WITH its measured FPR cost (residual gap preserved). C3's
+"evasion is free, stealth-with-function is a trade-off" still stands separately. `C5_impossibility.md`
+§3–§8 formally RETRACTED (banner updated); kept for audit trail.
+
 ### 2026-07-08 (later) — CORRECTION: diffuse evades by OPPOSITE-EXTREME, not by looking benign; A1 refuted; 2nd-detector script replaced
 
 **WHAT.** First CPU results came in and corrected the earlier same-day plan:
