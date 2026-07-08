@@ -48,6 +48,51 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-08 — AAAI-27 upgrade program kicked off: pooling-impossibility theorem + second detector + fairness controls
+
+**WHAT.** Started the AAAI-2027 Main-Technical-Track upgrade (full-paper deadline 2026-07-28).
+Added three deliverables and one GPU runbook:
+1. `contributions/C5_impossibility.md` — promotes C5's empirical "multi-layer pooling fails to
+   recover the diffuse attack" to a *theorem*: for any detector `h=g∘ρ` built from the per-layer
+   spectral features, `TPR−FPR ≤ TV(P_B,P_D) ≤ ε` and pooling cannot increase it (data-processing
+   inequality); concat ties the single-layer bound, mean/max can only lose. Explains the rejected
+   mean-pool-100% as a calibration artifact, not a recovery.
+2. `evaluation/second_detector_zscore.py` — runs the repo's *second, methodologically distinct*
+   detector (`core/deep_scan.py`, a per-layer z-score/anomaly head vs `core/detector.py`'s trained
+   logistic) on the same banks. Self-calibrates on benign vs standard poison (sanity gate: AUC≈1.0),
+   then reports detection collapse on the attack banks. CPU-only.
+3. `evaluation/feature_ablation.py` — orientation-free univariate AUC per spectral statistic
+   (benign vs each poison bank), the target's own U_m diagnostic style. CPU-only.
+4. `colab/AAAI_RUNBOOK.md` — three GPU jobs (~10 A100-h total): (a) scale the working∧spiky bank
+   15→40, (b) placement sweep via `LBD_DIFFUSE_LAYERS` (4-layer, 8-layer spreads), (c) diffuse at
+   1% poison rate.
+
+**WHY.** Three anticipated AAAI referee objections: (i) "you only broke one detector" → the
+second-detector script shows a different head over the same feature family collapses identically,
+supporting the *paradigm* claim; (ii) "pooling just needs better tuning" → the impossibility result
+shows no per-layer-spectral detector can do better, converting the paper from audit to method/theory
+(the main AAAI-novelty lever); (iii) "the diffuse comparison changed >1 variable and dropped the 1%
+rate, and the 100%→21% anchors on a behaviorally dead bank" → runbook Jobs 2/1/3 supply the
+placement dose-response control, the working∧caught∧spiky re-anchor, and the pr-1% planting-floor
+measurement respectively.
+
+**HOW.** New scripts reuse the existing feature extractors (`BackdoorDetector._extract_features_
+from_adapter`, `build_reference_bank.extract_delta_w`) so the second detector and ablation read
+adapters identically to the attacked detector; both import-verified against the real modules. The
+placement sweep needs no new code — it uses the existing `LBD_DIFFUSE_LAYERS`/`LBD_BANK_SEED` knobs.
+
+**HONESTY / SCOPE (load-bearing).** The impossibility result rests on Assumption A1 (a working
+diffuse backdoor's inspected-layer features are benign to within ε), which is *empirical*, with
+ε≈0.2 (not 0) — the single-layer detector still catches ~21% of diffuse. The theorem is stated
+*relative to the spectral-magnitude feature family only*: the backdoor remains in the raw weights,
+so recovery requires direction/cross-layer or behavioural features. `feature_ablation.py` +
+Job-2's ε(#layers) curve are the receipts for A1 and must ship with the theorem; do NOT claim a
+parameter-free / weights-in-general impossibility.
+
+**Paper relevance.** C5 / Discussion (the impossibility paragraph + LaTeX block are drafted in the
+note); Results (second-detector row → paradigm claim; placement dose-response figure); Experimental
+Setup / Limitations (fairness controls). Numbers pending the Colab run go under Measurements below.
+
 ### 2026-07-05 — P1-1 multi-backbone runner: `LBD_NUM_POISON` knob added; Gemma/Llama LEAN run staged
 
 **WHAT.** Added an `LBD_NUM_POISON` env knob to `config.py` (default 100) so the spiky
