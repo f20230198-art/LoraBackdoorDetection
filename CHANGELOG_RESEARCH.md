@@ -48,6 +48,46 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-10 (c) — Tier-1 correctness pass on paper_aaai.tex + Job A/B tooling prepared
+- **What (Tier-1 correctness fixes, all in paper_aaai.tex).**
+  (1) §4 "the working backdoors are exactly the ones scored as benign" was FALSE (it's 4/5; one
+  was caught, matching the figure caption) → corrected to "four of the five working backdoors are
+  scored as benign." (2) "leaking private data at ASR≈96%" contradicted the ethics para (no user
+  data) → "emitting its canary/placeholder payload at ASR≈96%." (3) C2 redefined in §Threat Models
+  as "detector-blind and threshold-blind ... never queries or optimizes against the detector," and
+  the dataset-matching instance now explicitly states the benign reference distribution is an
+  ASSUMPTION (assumed-known, weaponizes the defender's diversity choice), not an estimate.
+  (4) The white-box (C3) row is pulled from the headline evasion claim: "Four origins" → "Three
+  working-ASR origins (diffuse, dataset-match, CBA) plus a score-suppression PoC" whose ASR (0.45)
+  sits below the working threshold. (5) Removed the §Ethics sentence "We shared our findings with
+  the target's authors prior to submission" — user confirmed the authors were NOT contacted, so
+  the claim was false and had to go.
+- **Why.** Prism's review flagged these as factual bugs / internal contradictions, not opinions.
+  The honesty fence is the paper's identity; a false disclosure claim or an ASR/ethics contradiction
+  is exactly the kind of self-inflicted credibility wound the reviews warned against.
+- **Verified present (not bugs).** figures_tikz.tex IS in the repo (Prism saw only the PDF);
+  threshold symbol usage is consistent (deployed τ=0.585 vs the 0.50→0.65 injection-ablation sweep,
+  phrased as "calibrated threshold" not "any τ"). NOTE for compile: the 7 `\includegraphics{figures/*.png}`
+  targets are NOT on disk locally — they are produced by `plotScripts/make_aaai_figures.py` from the
+  results JSONs (regenerate/sync before Overleaf compile).
+- **How (Tier-2 tooling prepared, no GPU spent here).**
+  JOB A (GPU, user runs on Colab): `colab/JOB_A_spiky_n50_recipe.md` — scale the firing-verified
+  spiky bank from n=5 working to n≥50 working via `bankCreation/spikyWorkingBank.py` at pr 15–20%
+  (LBD_NUM_SPIKY_WORKING high, LBD_SYNC_EVERY=10 checkpoints to Drive; ~12.5% working yield → generate
+  ~400). Includes a cheap yield-probe step (rank/lr) and a fixed-firing-poison-rate detection readout
+  (answers the 1–5% vs 15–20% apples-to-oranges objection). Scored via measure_asr + evaluate_diffuse
+  against runs/run_aaai/classifier.pkl (thr 0.585321).
+  JOB B (CPU): NEW script `evaluation/multilayer_detector.py` + `colab/JOB_B_multilayer_recipe.md`.
+  Multi-layer aggregated spectral detector per contributions/multilayer_detector_brief.md: both
+  feature reps (concat ~720-dim + across-layer agg mean/max/std/top3 ~80-dim) × both heads
+  (logistic + RF) = 4 detectors, TRAINED ON BENIGN+SPIKY ONLY, scored against spiky/diffuse/dsmatch/
+  (optional CBA) + the critical unseen-benign FPR. Reuses BackdoorDetector._per_layer_block for
+  extraction. Syntax + import + --help verified locally.
+- **Paper relevance.** Tier-1 fixes go straight into §4/§Results/§Ethics. Job A unlocks the §4
+  reframe (n=5 caveat → an n≥50 rate that can lead the paper). Job B upgrades the paper from pure
+  audit → audit + a proposed detector (narrows-but-not-closed, or a paradigm-strengthening negative)
+  and, with the placement-sweep re-run, breaks the "true by construction" circularity two reviews flagged.
+
 ### 2026-07-10 (b) — prose pass + substance additions to paper_aaai.tex (5.5pp → ~7pp with content, not padding)
 - **What.** (1) Expanded §2 Related Work from 2 paragraphs into 5 subheads (Backdoors in LoRA/PEFT;
   Weight-space detection; Behavioral detection & defenses; Adaptive-attack methodology; Positioning),
