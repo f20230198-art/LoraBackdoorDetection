@@ -48,6 +48,174 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-10 (b) — prose pass + substance additions to paper_aaai.tex (5.5pp → ~7pp with content, not padding)
+- **What.** (1) Expanded §2 Related Work from 2 paragraphs into 5 subheads (Backdoors in LoRA/PEFT;
+  Weight-space detection; Behavioral detection & defenses; Adaptive-attack methodology; Positioning),
+  drawing in the reviewed-paper set; trimmed the old duplicative Positioning para. (2) Added an
+  Ethics & responsible-disclosure paragraph before the Conclusion. (3) Added the n=40 spiky-working
+  FIGURE (fig_spiky_working.png) + wired it into §4; wrote the CPU plot script
+  `plotScripts/plot_spiky_working.py`. (4) Hardened the scale caveat in §Limitations into an explicit
+  SUFFICIENCY-claim argument (one working attack family refutes "weights are enough"; existence not
+  large-n). (5) Added the §4→§7 bridge (spike keys on training intensity, decoupled from function →
+  weight-only fix is bounded → must pair with behavior).
+- **Verified.** All 17 \cite keys in the new Related Work resolve to references.bib (fixed loraonce →
+  loraonce2025; 0 undefined).
+- **Why.** 5.5pp reads thin for AAAI main track; grew toward the 7pp limit with expected content
+  (related work, ethics, a figure of the new result) that raises rigor rather than padding.
+- **How.** Edits to paper_aaai.tex; new plotScripts/plot_spiky_working.py.
+- **Honesty fences intact.** PEFTGuard not-first restated in §2; disclosure sentence flagged to
+  confirm-or-cut before submission; n=5 subset still labeled bounded. NOTE: ethics para claims
+  authors were contacted pre-submission — CONFIRM true or delete that one sentence.
+- **Paper relevance.** §2, §4 (+figure), §7 bridge, §Limitations, §Ethics.
+
+### 2026-07-10 — spiky-working audit scaled n=5 → n=40 (replaces the weak working-spiky caveat)
+- **What.** Built a 40-adapter single-layer spiky confirming bank (`spikyWorkingBank.py`, poison
+  rate 15/20%, layer 20, q/k/v/o r16) and scored it with the UNCHANGED calibrated detector
+  (`runs/run_aaai/classifier.pkl`, thr 0.585321). Goal: convert the n=5 "2/5 caught" caveat into a
+  quantitative finding a reviewer can't pull on.
+- **Numbers.** Planting yield (FIRM, n=40): only 13/40 (32.5%) fire at all (ASR>0), only 5/40
+  (12.5%) fire reliably (ASR≥0.5), mean bank ASR 0.14 — even at an ELEVATED 15–20% poison rate
+  (more aggressive than the target's own 1–5%). Raw all-40 detection is 75%, but that is dominated
+  by DEAD adapters; gating on function, detection among the 5 working = 1/5 (mean score 0.406 <
+  0.585). The working backdoors are exactly the ones read as benign.
+- **Why.** The old §3 finding rested on n=5 (2/5) and read as a caveat that half-undermined the
+  AUC-1.00 baseline. At n=40 the planting-yield claim is firm and the story flips: the perfect AUC
+  is an artifact of overtrained, non-functional poison; the detector keys on training intensity,
+  not a live backdoor. Attacks win by removing the spike while keeping the backdoor alive.
+- **How.** measure_asr.py (bare probes, n=20) + evaluate_diffuse.py scorer on the fixed run.
+  Results Drive `output_qwen/results_aaai/` (spiky_working_asr.json, spiky_working_scored.json).
+- **Honesty fence.** Planting yield (13/40, 5/40) reported as the firm number; the 1/5
+  function-gated detection reported as a bounded observation on a small subset (n=5), NOT a precise
+  rate. Folded into paper_aaai.tex §Audit ("behaviorally hollow" finding) and §Limitations.
+- **Paper relevance.** §4 Audit, §Discussion/Limitations. Closes the last weak-number soft spot
+  before the prose pass.
+
+### 2026-07-08 (latest+4) — AAAI finalize run: transfer matrix confirmed; working-spiky re-anchor + placement + pr1 undertrained (reported as floors)
+- **What.** Ran the finalize/scoring queue on the GPU banks built this session (spiky-working,
+  placement seeds 10/11/12, diffuse pr1 seed13). Collected the transfer matrix, placement curve,
+  and per-adapter ASR/score distributions.
+- **Transfer matrix (layer 20, 5% benign FPR) — CONFIRMED, becomes core paradigm evidence.**
+  Train→test detection: spiky→{spiky 100, diffuse 47, dsmatch 0}; diffuse→{spiky 0, diffuse 100,
+  dsmatch 0}; dsmatch→{spiky 37, diffuse 0, dsmatch 100}. Diagonal 100, off-diagonal collapses →
+  a detector tuned to one attack mode is blind to the others.
+- **Working-spiky re-anchor — SMALL-n honesty caveat, NOT a headline.** Of 39 spiky-working
+  adapters only 5 reached ASR≥0.5 (mean bank ASR 0.14; 27 dead at 0.0). Among those 5, detection
+  was **2/5** — two functional backdoors (ASR 0.65 and 0.75) scored 0.094 and 0.270 (read as
+  clearly benign). Signal: the detector's perfect AUC is partly inflated by overtrained/dead
+  spiky poison; on functional backdoors it already misses most. Reported as a bounded LIMITATION
+  (n=5), NOT a claim.
+- **Placement curve + diffuse pr1 — planting FLOORS, dropped as evasion points.** pr=1% diffuse:
+  0/20 fire (mean ASR 0.0) → below ~pr3% the backdoor doesn't plant. Low-layer placement points
+  fire weakly (4-layer mean ASR 0; 8-layer 28%). Not a dose-response; reported openly as an
+  attack floor, which supports (not undermines) the honesty framing.
+- **Why.** These GPU banks were "nice-to-have" polish; two undertrained. Decision: NO rerun —
+  the transfer matrix + existing C2 banks (which had real working ASR: diffuse 87.7% evasion
+  among working mean ASR 0.736; dsmatch 0% detection among 52 working) already carry the paradigm
+  claim. GPU saved for Paper 2.
+- **How.** measure_asr.py (bare probes, n=20) + logistic detector scoring at thr 0.585; results
+  in Drive `output_qwen/results_aaai/` (transfer_matrix.json, placement_curve.json,
+  *_scored.json, *_asr.json).
+- **Paper relevance.** §6 Results (transfer matrix table), §Mechanism/Limitations (the 2/5
+  working-spiky caveat + planting floors). Honesty fence intact: ASR reported with every
+  detection number; floors disclosed.
+
+### 2026-07-08 (latest+8) — paper_aaai.tex Related Work expanded (1 para → 5-part section, 8→22 cites)
+- **What.** Expanded §2 from a single "Positioning" paragraph into a proper Related Work with five
+  subheads: Backdoors in LoRA/PEFT; Weight-space detection; The target; Behavioral detection &
+  defenses; Adaptive-attack methodology; + kept Positioning. Draws in the reviewed-paper set
+  (loraonce, liang2024lowrank, lin2025safetycollapse, zhao2025datafree, zhao2025explanationrf,
+  gong2023kaleidoscope, nabavirazavi2024flpoisoning, hao2025multitarget, paul2026spectralgeometry,
+  weightsmodality2025, arshad2025cyberguard, pasha2025rldefense) alongside the core cites. Each
+  subhead SETS UP a later section (e.g. weight-space → why diffuse is predictable; behavioral →
+  motivates the C5 repair) rather than listing papers.
+- **Verified.** All 22 \cite keys resolve to references.bib entries (0 undefined). Paper was at
+  5.5pp before this; Related Work fills toward the 7pp AAAI limit with expected content.
+- **Why.** 5.5pp AAAI main-track reads thin; Related Work was the cheapest high-value gain (27
+  papers reviewed, only ~8 cited) and the section reviewers most notice.
+- **Paper relevance.** §2 Background & Related Work. Honesty fence (PEFTGuard = not-first) restated.
+
+### 2026-07-08 (latest+7) — paper_aaai.tex expanded from ~4pp skeleton to full AAAI length (tables + setup + ablations)
+- **What.** Fleshed out the compressed draft to full-paper depth, grounded in AAAI_2025_STUDY.md
+  lessons (main results table, dedicated Ablation subsection, seeds/CIs, ASR+detection paired).
+  Added: (1) full Experimental Setup (models, banks, 8 datasets, triggers cf/"Important update:",
+  payload HACKED, poison rates, ASR probe protocol per-dataset scaffold, compute); (2) MAIN RESULTS
+  TABLE (Table 1: scenario × detection × ASR × evade-working, all 4 origins incl. C3 white-box);
+  (3) MULTI-BACKBONE TABLE (Table: Qwen/Gemma/Llama × spiky AUC/det/diffuse/dsmatch + ASR row);
+  (4) seeds/CIs subsection (diffuse 24±7%, evasion 85±8%, ASR 0.56±0.05; dsmatch 0±0%/100±0%);
+  (5) MECHANISM CONTROLS TABLE (deployed 1-sided / RF head / two-sided Mahalanobis / trained-on-attack);
+  (6) dedicated Ablations subsection (benign diversity 0.76↔1.00, per-feature spikiness, threshold
+  injection 0.50→0.65). All numbers from contributions/RESULTS_SUMMARY.md.
+- **Consistency fix.** dsmatch two-sided detection set to 84% in BOTH the controls table and the
+  repair section (matches distribution_shift.json / fig_c5_repair source; RESULTS_SUMMARY's 80.6%
+  is the held-out-slice variant — used the figure's number to avoid a table/figure contradiction).
+- **Why.** The compiled PDF was ~4 pages (figures were eating the space); AAAI main track reads
+  thin under 7pp. The additions are expected content (tables, reproducible setup, ablations), not
+  padding, and raise rigor.
+- **How.** Edits to literature/literatureReview/paper_aaai.tex. Honesty fences intact (ASR gates
+  every evasion claim; C3 marked PoC; planting floors disclosed; no restored 100%).
+- **Paper relevance.** §5 Setup, §6 Results (Tables 1–2 + seeds), §7 Mechanism (controls table),
+  §7.x Ablations. Should land the paper near 6–7pp on next compile.
+
+### 2026-07-08 (latest+6) — inlined the system-architecture TikZ (Fig 6) into paper_aaai.tex
+- **What.** Replaced `\includegraphics{fig_system_architecture.png}` (a PNG that never existed
+  on disk) with the actual TikZ code from figures_tikz.tex Fig 6, in a `figure*` (full-width)
+  env. The intro problem diagram + detector pipeline were already inline TikZ.
+- **Result:** every remaining `\includegraphics` in the paper is now one of the SIX result PNGs
+  that live on Drive `output_qwen/results_aaai/` (fig_scenario_comparison, fig_transfer_matrix,
+  fig_multibackbone, fig_feature_space, fig_placement_curve, fig_c5_repair). No other image
+  dependencies. Figs 2/3/4 in figures_tikz.tex (feature-space schematic, threat models, program
+  overview) remain OPTIONAL extras, not wired in.
+- **Why.** So the paper compiles with zero missing-image errors once the 6 Drive PNGs are
+  uploaded; the two prof-requested diagrams (intro problem + system architecture) are now
+  self-contained TikZ that render on compile.
+- **Paper relevance.** §4 (system architecture figure). Internal/format.
+
+### 2026-07-08 (latest+5) — paper_aaai.tex round-1 prose pass (send-to-advisor quality)
+- **What.** Full read-through + targeted edits of paper_aaai.tex. Fixed the two claims the
+  finalize run contradicted (working-spiky "still caught" → honest 2/5 caveat; placement
+  "ASR holds" → detection-only sweep + firing attributed to the diffuse C2 bank). Added the
+  n=5 working-spiky caveat to §Limitations. Tightened the comma-spliced "Confounds" list and
+  fixed the "Each seams open" typo → "Each opens".
+- **Verified.** CBA citation (chen2026cba) already correct in references.bib — "Causal-Guided
+  Detoxify Backdoor Attack", NDSS 2026, arXiv 2512.19297 (not "Composite"). That review item
+  is closed.
+- **Why.** Align the paper with the actual finalize numbers and remove the two overclaims a
+  strict AAAI reviewer would catch; keep the honesty framing (ASR+detection pairs, disclosed
+  floors) that is the paper's identity.
+- **How.** Edits to literature/literatureReview/paper_aaai.tex (gitignored under literature/).
+- **Paper relevance.** §3 Audit, §6 Mechanism/placement, §Limitations. Draft now internally
+  consistent with results_aaai/ numbers.
+- **Remaining (no GPU/code):** AAAI author kit (rename \usepackage{aaai25}); download
+  results_aaai/*.png → figures/; export fig_system_architecture from figures_tikz.tex Fig 6;
+  Overleaf compile; prof review; submit + arXiv ~July 28.
+
+### 2026-07-08 (latest+3) — AAAI prep: study of 9 example papers + AAAI-format draft (paper_aaai.tex) with corrected story
+
+**WHAT.** Advisor asked to study AAAI-2025 papers + add 3 diagrams + follow the AAAI format.
+- Read all 9 advisor PDFs (3 backdoor: ConfGuard/BTU/BrieFool; 6 format templates incl. 3 LoRA
+  papers). Wrote `literature/AAAI_2025_STUDY.md`: per-paper structure, the AAAI paper anatomy,
+  our-figures→section mapping, and presentation lessons (esp. a capability-comparison table).
+- Added the 3 requested diagrams (prior entry): intro/problem (TikZ Fig 5), overall system
+  architecture (TikZ Fig 6), comparative scenarios (fig_scenario_comparison).
+- Ported the paper into AAAI form: `literature/literatureReview/paper_aaai.tex` — AAAI author-kit
+  preamble, numbered AAAI section skeleton, all figures wired (inline TikZ for problem+pipeline,
+  includegraphics for result PNGs), a new capability-comparison table (Table 1), and the CORRECTED
+  spine: "distribution mismatch, not information loss" (replaces the retracted impossibility), the
+  transfer-matrix + opposite-extremes mechanism, and the two-outcome C5 (two-sided 85% OOD-benign
+  FPR vs supervised 96% cross-dataset). Added `confguard2025` to references.bib; all cites resolve.
+- Gitignored `AAAI 2025 papers/`, `reaclconferencetemplate/`, and `*.zip` (advisor material, local).
+
+**WHY.** The paper must be in AAAI format and match the level/structure of accepted AAAI work; the
+port also bakes the corrected findings into the draft so the rewrite is done directly in-format.
+
+**OPEN.** (1) Still need the official AAAI author kit (aaaiXX.sty/.bst) — the "template" folder is
+example PDFs, not the kit; port via the Overleaf AAAI template and rename the \usepackage + 
+\bibliographystyle lines. (2) fig_system_architecture.png = export TikZ Fig 6 (or inline as figure*).
+(3) result PNGs + placement figure generate after the GPU jobs; a few numbers (working-spiky re-anchor,
+placement) still land from Jobs 1-3.
+
+**Paper relevance.** This IS the AAAI draft. paper_final.tex (IEEEtran) kept as the arXiv/history version.
+
 ### 2026-07-08 (latest+2) — visualization tooling: attack transfer matrix + TikZ architecture figures + result-figure generator
 
 **WHAT.** Added figure tooling (advisor asked for architecture diagrams):
