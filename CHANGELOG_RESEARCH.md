@@ -48,6 +48,57 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-13 — JOB A landed (spiky-working n=5 -> n=60) + JOB B multi-layer detector result; folded into paper
+- **What (JOB A, the §4 reframe, now a real rate).** Generated a 400-adapter single-layer spiky
+  confirming bank at elevated 15-20% poison and probed each for behavioral ASR
+  (`spikyWorkingBank.py`, then `measure_asr.py`). Yield: **135/400 fire (ASR>0), 60/400 WORKING
+  (ASR>=0.5)**, mean bank ASR 0.15, mean ASR among working 0.61, clean-firing 0.00 throughout.
+  Re-calibrated the deployed detector from the Drive banks (benign 400 + standard spiky 100) into
+  `runs/run_aaai/classifier.pkl` — reproduced **threshold 0.585321 exactly** (same as the original
+  run) — and scored the 400-bank with it (`evaluate_diffuse.py`). **Function-gated detection: among
+  the 60 working backdoors, 24/60 (40%) caught, so 36/60 (60%) EVADE; mean detector score among
+  working 0.530 < 0.585 threshold.** Raw (non-gated) detection over the whole 400-bank = 70%.
+  Poison-rate split (answers the 1-5% vs 15-20% objection): working pr20 = 51, caught 17/51 (33%);
+  working pr15 = 9, caught 7/9 (78%) — the MORE aggressive poison rate that plants better also
+  EVADES better. (Also: nearly all evaders are the contextual-trigger pr20 adapters; rare-token
+  pr15 mostly caught at ~0.9.)
+- **Why.** The old finding was n=5 (1/5 caught, "80% evade") — flagged by all three reviews as the
+  best idea but biggest liability. Scaling to n=60 firing-verified working backdoors converts it
+  from an anecdote into a rate. HONESTY: the real rate (60% evade) is WEAKER than the lucky n=5 draw
+  (80%); we report 60%, not 80% — the claim stands (mean working score below threshold; 60% of live
+  backdoors scored benign) without the small-sample inflation.
+- **What (JOB B, multi-layer aggregated detector, `evaluation/multilayer_detector.py`).** Trained
+  on benign+spiky ONLY (never on the evading attacks), 4 variants (concat/agg x logistic/RF).
+  Result: all 4 keep spiky AUC 1.00 and unseen-benign FPR **0%**. The **aggregated** rep catches
+  **diffuse at 100%** (vs layer-20 baseline 21%, vs two-sided repair 85% FPR) — a genuine
+  improvement with no FPR cost. But **dsmatch stays 0% across all 4 variants.** Conclusion:
+  multi-layer scanning closes the PLACEMENT loophole (diffuse) but is powerless against the
+  DISTRIBUTION-MATCHING loophole (dsmatch) — because dsmatch hides by weight-SHAPE, not by spatial
+  spread. Both a positive contribution (a proposed detector that narrows the gap) AND a
+  reinforcement of the paradigm claim (residual gap survives). Do NOT claim the gap is closed.
+- **How (paper edits, paper_aaai.tex).** §4 hollow-bank paragraph rewritten to n=400 / 60 working /
+  40% caught / 60% evade / mean 0.530, + the pr15-vs-pr20 split; fig caption updated (n=400, 60/400,
+  60% below threshold); §Repair "5/40, 1/5 caught" -> "60 working-verified, 40% caught"; Limitations
+  small-n=5 hedge replaced with the honest n=60-is-a-rate framing; bank-size range 40-400 -> 100-400.
+  JOB B written into §Repair (see next bullet).
+- **Placement re-run (breaks 'true by construction').** Calibrated an all-36-layer concat detector
+  (`calibrate_detector.py` with LBD_DETECTOR_LAYERS=0..35, pool=concat -> runs/run_multilayer) and
+  re-ran the placement sweep through it: **1-layer spiky = 100%, 36-layer diffuse = 21%** — the SAME
+  collapse as the layer-20 detector. (Threshold came out 0.5853, same as single-layer: expected,
+  because perfect separation + balanced logistic saturates probabilities identically regardless of
+  feature dim; the [C5] multi-layer routing DID run, 720-dim features extracted.) Proves the
+  placement collapse is NOT an artifact of where the detector looks. Paper: added the
+  'true by construction' rebuttal to §Why placement text + a new §Repair paragraph + Table
+  tab:multilayer (4 variants: concat-logistic/RF, agg-logistic/RF). Framing = DIAGNOSTIC probe, not
+  a proposed product: concat all-layers still fails on diffuse (21%); purpose-built aggregation
+  recovers diffuse (100% at 0% FPR) but NO variant touches dsmatch (0%) — multi-layer scanning
+  closes the PLACEMENT loophole, not the DISTRIBUTION-MATCHING one. Result JSON
+  `results_aaai/placement_multilayer.json`, fig `fig_placement_multilayer.png`.
+- **Paper relevance.** This is the paper's most original idea (§4) now on solid n; unblocks the
+  reframe all three reviews called the path to A-tier. JOB B upgrades audit -> audit + proposed
+  detector. Results JSONs on Drive `results_aaai/`: `spiky_working_n50_asr.json`,
+  `spiky_working_n50_eval.json`, `multilayer_detector.json`.
+
 ### 2026-07-10 (c) — Tier-1 correctness pass on paper_aaai.tex + Job A/B tooling prepared
 - **What (Tier-1 correctness fixes, all in paper_aaai.tex).**
   (1) §4 "the working backdoors are exactly the ones scored as benign" was FALSE (it's 4/5; one
