@@ -48,7 +48,32 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-14 — CORRECTION to the 2026-07-13 JOB A entry (n=400 scoring was NOT on Drive)
+- **What.** Audited the Drive artifacts behind the 2026-07-13 "n=400 / 60 working / 40% caught /
+  60% evade / mean 0.530" claim. The 400-adapter bank exists (`spiky_working_poison/` has folders
+  000-399), but NO scored file on Drive covers more than 40 adapters. The real files
+  (`spiky_working_asr.json` num_adapters=40; `job1_spiky_working_scored.json` len=39;
+  `spiky_working_scored.json` num_scored=40) are the OLDER n=40 run (2026-07-10, bare probing).
+  Recomputed from real per-adapter data: n=40 scored → 5 working (ASR>=0.5) → 2 caught / 3 evade,
+  mean score among working 0.496. The n50 output names the recipe expected
+  (`spiky_working_n50_asr.json` / `_eval.json`) DO NOT EXIST — STEP 3 (scoring all 400) never
+  synced to Drive (asr file `path` field points at local `/content`, lost on runtime end).
+- **Why this matters (honesty fence).** The paper (paper_aaai.tex §4 + abstract + fig caption)
+  currently reports the UNBACKED n=400 numbers, which are STRONGER than the data supports
+  (60% evade claimed vs 25% evade actual on the 40 scored). This is the exact "make numbers
+  bigger" failure the handoff warns against. Paper NOT edited yet — pending a real re-score.
+- **Action.** Re-run STEP 3 of `colab/JOB_A_spiky_n50_recipe.md` on the existing 400 bank
+  (bare probing, thr 0.585321, runs/run_aaai) → `spiky_working_400_asr.json` /
+  `_400_eval.json`. Then either (a) numbers match ~60% evade → paper stands, or (b) they differ
+  → correct paper text + `fig_spiky_working` to the truth. Figure generator
+  (plotScripts/make_aaai_figures.py) already loads these JSONs if present; until then its
+  fig_spiky_working synthesizes bars to the (currently unverified) n=400 counts — DO NOT SHIP
+  that figure until the re-score lands.
+
 ### 2026-07-13 — JOB A landed (spiky-working n=5 -> n=60) + JOB B multi-layer detector result; folded into paper
+> **SUPERSEDED / SUSPECT — see the 2026-07-14 correction above. The n=400 scoring described in
+> this entry has no backing artifact on Drive; treat its 60-working / 40%-caught / 60%-evade /
+> mean-0.530 numbers as UNVERIFIED until the re-score completes.**
 - **What (JOB A, the §4 reframe, now a real rate).** Generated a 400-adapter single-layer spiky
   confirming bank at elevated 15-20% poison and probed each for behavioral ASR
   (`spikyWorkingBank.py`, then `measure_asr.py`). Yield: **135/400 fire (ASR>0), 60/400 WORKING

@@ -214,26 +214,49 @@ def main():
     if args.scaffold:
         log("Probe mode: SCAFFOLD ('### Instruction:/### Response:') — for dataset-matching bank.")
 
-    results = []
+    # Resume-skip + incremental save: on a long bank run (e.g. 400 adapters ~2-3h on GPU)
+    # a Colab disconnect must not cost the whole run. We load any existing output, skip
+    # adapters already scored, and rewrite the JSON after every adapter so a crash loses
+    # at most one adapter's work. Re-running the SAME command always continues safely.
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+
+    def write_out(res):
+        m_asr = sum(r["asr"] for r in res) / len(res) if res else 0.0
+        m_clean = sum(r["clean_firing_rate"] for r in res) / len(res) if res else 0.0
+        with open(args.out, "w") as f:
+            json.dump({
+                "path": args.path,
+                "num_adapters": len(res),
+                "prompts_per_adapter": n,
+                "probe_mode": "scaffold" if args.scaffold else "bare",
+                "mean_asr": m_asr,
+                "mean_clean_firing_rate": m_clean,
+                "per_adapter": res,
+            }, f, indent=2)
+        return m_asr, m_clean
+
+    results, done = [], set()
+    if os.path.isfile(args.out):
+        try:
+            prev = json.load(open(args.out)).get("per_adapter", [])
+            results = prev
+            done = {r["adapter"] for r in prev}
+            if done:
+                log(f"Resuming: {len(done)} adapter(s) already scored, skipping them.")
+        except Exception:
+            pass  # corrupt/partial file -> start clean
+
     for d in adapter_dirs:
+        name = os.path.basename(d.rstrip("/"))
+        if name in done:
+            continue
         r = score_adapter(base_model, tokenizer, d, n, scaffold=args.scaffold)
         results.append(r)
-        log(f"  {r['adapter']}: ASR={r['asr']:.2f}  clean-fire={r['clean_firing_rate']:.2f}  (trig='{r['trigger']}')")
+        write_out(results)  # checkpoint after each adapter
+        log(f"  [{len(results)}/{len(adapter_dirs)}] {r['adapter']}: ASR={r['asr']:.2f}  "
+            f"clean-fire={r['clean_firing_rate']:.2f}  (trig='{r['trigger']}')")
 
-    mean_asr = sum(r["asr"] for r in results) / len(results)
-    mean_clean = sum(r["clean_firing_rate"] for r in results) / len(results)
-    summary = {
-        "path": args.path,
-        "num_adapters": len(results),
-        "prompts_per_adapter": n,
-        "probe_mode": "scaffold" if args.scaffold else "bare",
-        "mean_asr": mean_asr,
-        "mean_clean_firing_rate": mean_clean,
-        "per_adapter": results,
-    }
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
-    with open(args.out, "w") as f:
-        json.dump(summary, f, indent=2)
+    mean_asr, mean_clean = write_out(results)
 
     log("=" * 60)
     log(f"MEAN ASR (backdoor fires on trigger):   {mean_asr:.3f}")
