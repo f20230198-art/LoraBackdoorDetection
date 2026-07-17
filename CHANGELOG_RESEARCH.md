@@ -48,6 +48,534 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-17 — C3 moved to an appendix: no claim in the paper now rests on an attack that fails our own gate
+
+**Why.** The review's cleanest free hit: "your strongest attacker fails your own gating
+criterion. Reporting it as a 'mechanism demonstration' invites a reviewer to write *the authors'
+own metric disqualifies their strongest attack* — a free hit for them, no gain for you." C3
+suppresses the real detector's score 0.94 -> 0.0 completely, but its best adapter fires at
+ASR 0.45, under our own 0.5 working gate. Keeping that row in the HEADLINE table (tab:main)
+meant the paper's main result contained a row the paper's own metric rejects.
+
+**What changed.**
+- **tab:main: C3 row REMOVED.** Every row in the headline table now passes the ASR gate. The
+  table's story is cleaner too: three attacks of independent origin, all with working
+  backdoors, all through one operating point.
+- **§6.1 prose:** "Three working-ASR origins plus a score-suppression PoC" -> "Three attacks of
+  independent origin, all with working backdoors, all through one operating point." C3 demoted
+  to one sentence pointing at the appendix, stating plainly that it is excluded from every
+  claim.
+- **NEW Appendix A (`app:c3`)** — the honest full record: (a) setup — the detector's pipeline
+  (SVD -> 5 spectral stats -> scaler -> logistic head) is differentiable end-to-end in ΔW, so a
+  white-box attacker backprops the poison score into the weights with the LM outside the loop;
+  the λ_fidelity term pins ΔW near the trained backdoor (small λ evades but drifts ΔW and costs
+  ASR; large λ preserves ASR but cannot evade); we sweep λ and report the trade-off. (b) result
+  — evasion TOTAL (0.94 -> 0.0, vs τ=0.585) and CHEAP (CPU-minutes/adapter, not hundreds of
+  GPU-hours, because the LM is out of the inner loop). The differentiability of the screening
+  pipeline is a liability, and that a "strong-attacker" experiment is this inexpensive is itself
+  a finding. (c) why we don't count it — best adapter ASR 0.45; our 20-probe harness has SE≈0.11
+  there, so 0.45 is NOT distinguishable from the 0.5 gate and we decline to argue it either way.
+  We state that we did not produce a white-box adapter that both evades AND demonstrably works,
+  and that whether the gap is a real stealth/efficacy tension or an artifact of our λ sweep and
+  probe budget is open. **We report the failure rather than tune until the number crosses.**
+- All surviving C3 pointers (threat-model §3 + tab:threat caption, §5 Compute, §9 Limitations)
+  now route to Appendix~\ref{app:c3} instead of to body sections that no longer discuss it.
+
+**Caught during the edit:** the appendix insertion clobbered `\end{document}` (the edit replaced
+the bibliography+end block). Restored; verified exactly 1 `\end{document}`, all refs resolve,
+all 5 new citations still live.
+
+**Net effect.** The paper claims less and is unattackable on this axis: the "we take ASR
+seriously" methodological contribution is now applied to our OWN strongest attack, publicly, at
+the cost of a headline row. That consistency is the point — it is the same fence as the n=400
+audit, pointed inward.
+
+**Paper relevance.** §3, §5, §6.1, §9, tab:main, tab:threat caption, new Appendix A.
+
+### 2026-07-17 — Post-compile content pass: "paradigm" purged, and the recipe-classifier claim LANDED
+
+First compile of the reframed paper (user, Overleaf) came back clean — no broken LaTeX, refs
+resolve, bib fine. Body runs long but a large part of that is `[H]`-locked floats leaving
+whole-page gaps; float/layout work is DEFERRED to a final formatting pass by user decision.
+This entry is content only.
+
+**1. The "paradigm" language survived the reframe in three places — now gone.**
+The Tier 1 reframe scoped the claim down ("we audit one detector... we do not claim it") but
+three instances survived because they were in a heading and two captions, which a text pass
+over prose missed. A reviewer reading the careful §9 scoping and then hitting "the paradigm"
+reads it as inconsistent.
+- §6.3 heading "The paradigm across three backbones" -> "The collapse is not specific to one
+  backbone". Body claim "evidence that the failure is a property of the paradigm" -> now states
+  precisely what a 3-backbone replication buys: it rules out a Qwen-specific accident; it does
+  NOT establish anything about weight-space screening in general — "that would require a second
+  DETECTOR, not a second backbone."
+- tab:multibb caption: same fix.
+- §8 residual gap: "no weight-space detector is robust to unanticipated attack families; the
+  repair supplements the paradigm" — a universal claim from n=1 detector. Now: "every repair we
+  build buys coverage of the attack families it was shown and nothing beyond them."
+
+**2. THE BIG ONE — control (ii) reinterpreted (new §7 paragraph).** The review's deepest point,
+previously gestured at and never landed. Our Table 5 control trains a detector on
+benign-vs-diffuse and gets AUC 1.0000, which the paper read as "the signal IS in the weights."
+That reading is too flattering to us. Separating benign from diffuse perfectly shows only that
+the two POPULATIONS differ somewhere in feature space — NOT that what separates them is the
+backdoor. Diffuse adapters differ from benign ones in how they were TRAINED (update spread over
+36 layers vs one), and that is visible in the spectrum whether or not a trigger was ever
+planted. So:
+- **The unifying claim, stated plainly:** this feature space measures WHICH RECIPE PRODUCED AN
+  ADAPTER. The target's AUC 1.00 separates benign from spiky-single-layer-recipe adapters; our
+  AUC 1.00 separates benign from diffuse-multi-layer-recipe adapters. Both are excellent
+  classifiers. **Neither is a backdoor detector.** Our own control would very likely fail the
+  same n=400 behavioral test we used to expose theirs, and we say so.
+- What makes the target's number a PROBLEM is not a weak feature space but that a recipe
+  classifier was deployed as a backdoor screen, and its benchmark could not tell the difference
+  because it never ran the adapters.
+- **Consequence wired into §8:** a supervised attack-aware detector does not learn "what a
+  backdoor looks like," it learns what THAT ATTACK'S RECIPE looks like — which is exactly why it
+  generalizes across datasets and collapses across attack families, and why adding recipes to
+  the calibration pool never converges on a backdoor detector (each addition buys one recipe).
+- §9 Discussion opening now leads with this framing.
+This is the honest, less flattering, and stronger version of the paper's thesis. It turns our
+own control from a self-congratulatory result into evidence for the central claim.
+
+**3. §7/§8 tension resolved (new §7 paragraph).** §7's mechanism (one-sidedness) does not
+explain both attacks equally, and saying so sharpens it. Diffuse IS anomalous (flat extreme) and
+is missed only because the detector looks in one place/one direction — a multi-layer two-sided
+defender recovers it entirely. Dsmatch is different in kind: not anomalous anywhere, at any
+layer, by construction. One-sidedness defeats the detector on diffuse; distribution matching
+defeats it on dsmatch even AFTER one-sidedness is fixed.
+
+**4. tab:controls caption de-densified** (the review's garden-path example — "misses attacks
+that a different head still misses... that a two-sided rule catches..."). Now one clause per
+row, plus the recipe-vs-backdoor caveat pointing at the text.
+
+**5. CITATION REGRESSION CAUGHT AND FIXED.** The user's own edit pass trimmed the §2 "Stealth in
+parameter space" paragraph and removed the `xu2025stealthiness` + `qiu2022critical` citations
+with it — leaving both in references.bib but UNCITED, i.e. re-opening the exact gap the
+2026-07-16 related-work pass closed (the review's "your audit engages less prior work than the
+target" objection). Restored in compact form: Xu shapes a parameter-space footprint to defeat
+weight inspection; Qiu argues countermeasures are evaluated too optimistically; the target cites
+both and concedes the premise while its non-adaptive evaluation ignores it. Verified: 5/5 new
+keys cited, 0 uncited, 0 undefined.
+
+**Paper relevance.** §2, §6.3, §7 (+2 new paragraphs), §8, §9, tab:controls + tab:multibb
+captions. No number changed.
+
+**Still open:** C3 -> appendix (content decision); figure cuts + float placement (DEFERRED to
+final format pass); partial dsmatch sweep (GPU, optional); OpenReview venue check (7L3eI323bn).
+
+### 2026-07-16 — The 15%-vs-73% planting gap answered (§4): it is CAPACITY, and diffuse is the control
+
+**The objection (from the external review).** "Your own attack recipes plant at 52-73% while
+your reimplementation of *their* recipe plants at 15%. The obvious reviewer response: your
+hollow-bank finding is an artifact of your training pipeline, and you've proved it by training
+working backdoors with the same pipeline." Left unanswered this dismisses the paper's headline.
+
+**Verified yields (recomputed from the JSONs, not prose):**
+- spiky (their recipe, n=400): fire >0 = 135 (33.8%), work >=0.5 = **60 (15%)**
+- diffuse (n=100): fire >0 = 79 (79%), work >=0.5 = **73 (73%)**
+- dsmatch (n=98): fire >0 = 58 (59%), work >=0.5 = **52 (53%)**
+
+**The answer — the diffuse bank is a near-perfect control, and it refutes the objection.**
+Read from `config.py` + the bank generators:
+
+    BANK        layers   poison rate   epochs   lrs                work%
+    spiky(400)  1 (L20)  15/20%        2        1e-4,2e-4,3e-4     15%
+    diffuse     ALL 36   3/5%          2        1e-4,2e-4,3e-4     73%
+    dsmatch     1 (L20)  5/10/15%      6        2e-4,3e-4          53%
+
+Diffuse uses the SAME epochs and the SAME lr grid as spiky, at a LOWER poison rate, and plants
+~5x more often. The pipeline is held constant; the only variable that changes is CAPACITY
+(rank-16 across 36 layers vs rank-16 confined to layer 20). So the gap cannot be "their harness
+can't train backdoors." Supporting evidence already in the paper: CBA independently reads
+ASR ~96% on the same probe, so the ASR instrument reads high when a backdoor is really there.
+dsmatch IS trained harder (6 epochs, weakest lr dropped) because an 8-dataset trigger->payload
+map is harder to learn — that deviation was already disclosed when the attack was introduced,
+and it does not bear on the spiky bank's yield.
+
+**Proposed mechanism (stated as a hypothesis, NOT a claim).** A backdoor confined to one layer
+must overwrite that layer's clean behavior to be learned at all, and at rank 16 it usually loses
+that competition — which is the planting floor, and why the audited recipe needs an aggressive
+poison rate to fire. A rank/lr sweep at fixed placement would settle it; flagged as open. (The
+review and Gemini both asked "why is planting yield low?" — this is the honest partial answer.)
+
+**What we now claim, narrowed.** NOT "their recipe cannot plant backdoors" (it plants 15% at an
+elevated rate, and we report exactly that). We claim a bank built this way is mostly inert, its
+authors never measured this because they never ran the adapters, and a detector scored on it is
+graded largely on adapters with no backdoor to find.
+
+**Also fixed:** §Setup said "poison rates follow the target paper's 1-5% regime", which
+contradicted the 15-20% confirming bank. It now states each bank's rate separately (reproduction
+1-5%; confirming bank 15-20% deliberately HOTTER so low yield cannot be blamed on
+under-poisoning; diffuse 3-5%; dsmatch 5-15% @ 6 epochs) and notes training is otherwise
+identical (rank 16, same lr grid, 2 epochs).
+
+**Paper relevance.** §4 (new paragraph "Is the hollow bank just our training pipeline?"),
+§Setup. No number changed; this is disclosure + a control that already existed in our data.
+
+### 2026-07-16 — Related work gap closed: parameter-space prior art + the classical defense canon
+
+**The problem.** The review's most embarrassing finding: our audit engaged LESS prior work than
+the paper it audits. The target cites Xu et al. 2025, Qiu et al. 2022, Neural Cleanse, STRIP,
+activation clustering, and spectral signatures. We cited only the last. At AAAI (an ML venue,
+not a security venue) the missing classical backdoor-defense literature costs more than it would
+at NDSS. Xu et al. is the worst omission: it is *about making backdoors stealthy in parameter
+space* — i.e. prior art for our own attacks — and a reviewer reading both papers would notice.
+
+**What we added (5 bib entries + 2 rewritten Related Work paragraphs).**
+- All five entries were lifted VERBATIM from the target's own `main.bib`
+  (`literature/arXiv-2602.15195v3/main.bib`), so they are consistent with what the target claims
+  to build on and required no invention: `xu2025stealthiness`, `qiu2022critical`,
+  `wang2019neural` (Neural Cleanse), `gao2019strip` (STRIP), `chen2018detection` (activation
+  clustering). `tran2018spectral` was already present.
+- **New §2 paragraph "Stealth in parameter space."** Positions our attacks as inheriting this
+  line rather than inventing it. Key move: the target's own Related Work (main.tex:136) concedes
+  "backdoor structure can be made stealthier in weights" citing Xu+Qiu — a concession its
+  non-adaptive evaluation never acts on. Our differentiator is stated in one line: *Xu et al. ask
+  whether a stealthy backdoor can evade a parameter-space screen; we ask, of the adapters a
+  screen certifies, which ones have a backdoor at all.* (The behavioral axis is what we add.)
+- **§2 "Behavioral detection" rewritten** to name the actual canon (activation clustering /
+  Neural Cleanse / STRIP / spectral signatures / ONION / ConfGuard) and turn it into an argument
+  rather than a list: every one needs execution, probe inputs, a trigger-search budget, or
+  deployment observation — which is exactly the case FOR weight-space screening, and exactly why
+  a weight-space evaluation must still BORROW execution to validate its own poison bank. That is
+  the step the target omits and we supply.
+- **§2 "Adaptive-attack methodology"** now routes the adaptive-evaluation canon into backdoors
+  via Qiu et al., and states how our audit differs: prior work asks whether a defense survives an
+  unanticipated attacker; we ask whether the benchmark certifying it measures the phenomenon at
+  all.
+
+**Verified.** All 5 new keys cited exactly where added; 0 cited-but-undefined; 0 added-but-uncited.
+
+**VENUE CONFLICT RESOLVED (reverses a 2026-07-04 decision).** The 07-04 citation-integrity pass
+recorded that `merenciano2026workshop`'s venue "SPOT: Scaling Post-training" was wrong and changed
+it to "ICLR 2026 Workshop on Reliable Autonomy". That change was itself the error and is now
+REVERTED. Evidence: the published PDF's running header on EVERY page
+(`literature/papers/29_Weight_Space_Detection_of_B.pdf`) reads "Published as a workshop paper at
+the 1st Workshop on Scaling Post-training for LLMs (SPOT), ICLR 2026." The PDF is the primary
+source. Both the header comment and the entry now record the reversal + the evidence, so this
+does not flip a third time. AUTHOR: confirm on OpenReview 7L3eI323bn before submitting.
+
+**Paper relevance.** §2 (Related Work), references.bib. No number changed.
+
+### 2026-07-16 — CBA-vs-multilayer cell: NOT RUN (ill-posed), scope limit + placement/shape concession written instead
+
+**The ask.** The external review called this "the missing cell that decides your paper": Table 6
+(tab:multilayer) tests the multi-layer aggregated detector against spiky/diffuse/dsmatch but not
+CBA. Reviewer's argument: CBA is diffuse by construction, so if aggregation catches it, 2 of our
+3 attacks are patched by a 20-line change and the paradigm claim rests on dsmatch alone. Reviewer
+believed this was cheap ("~1 day, CPU feature extraction over an existing bank").
+
+**Why we did NOT run it — the comparison is ill-posed, not merely expensive.**
+`evaluation/multilayer_detector.py` already HAS a `--cba_dir` flag, so it looks ready to run. It
+is not. Verified from `results/cba_pii_adaptive/adaptive/`:
+- CBA adapter: **Llama-2-7B**, `target_modules = ['q_proj','v_proj']`, **32 layers** (0-31),
+  128 tensors, rank 16.
+- Our multi-layer detector: **Qwen2.5-3B**, `{q,k,v,o}`, **36 layers**.
+`all_layer_blocks()` (multilayer_detector.py:75-94) ZERO-FILLS any absent layer/projection. So
+scoring CBA with the Qwen detector yields a feature vector that is zero in every k_proj and
+o_proj slot and zero for layers 32-35. The detector would then separate it from benign on the
+**architecture mismatch**, not the backdoor. Both outcomes are artifacts:
+- "aggregation catches CBA 100%" -> it caught a half-zero vector. Reviewer spots it instantly.
+- "aggregation misses CBA" -> a strong claim resting on a broken comparison.
+This is the same error class as the review's own critique of our "signal is in the weights"
+control: a classifier separating two distributions does not tell you WHAT it separated them on.
+
+**Cost of doing it properly (rejected for now).** Needs a benign(152) + spiky(40) bank trained on
+Llama-2-7B = 192 adapters (CBA adapter itself already exists; multilayer detector must train on
+benign+spiky before it can score anything). Extrapolating from the Gemma-2-2B LEAN precedent
+(2026-07-06) at ~3.5x params: ~8-19 A100-hours ~= **150-300 Colab units**. Caveat: extrapolation,
+not measurement — we have never trained a 7B bank (everything to date is 2-3B), and 7B on A100-40GB
+may force smaller batches. Judged not worth it: the EXPECTED outcome (aggregation catches CBA)
+CONFIRMS the reviewer's worry rather than refuting it, i.e. ~200 units to prove our own claim is
+narrower. Recommendation on record: spend GPU on the partial dsmatch sweep (2/4/6 of 8) instead —
+it tests the SURVIVING attack's threat model, runs on Qwen (no new 7B bank), and is cheaper.
+
+**What we wrote instead (free, and sharper).**
+- **§8 new paragraph "This result re-sorts our own attacks."** Our three attacks are not three
+  instances of one failure. Diffuse = a **placement** attack (moves the same spiky update where
+  the detector isn't looking; a detector that looks everywhere catches it). Dataset-matching = a
+  **shape** attack (looks like the reference distribution; no anomaly at any depth). CBA is
+  expected to fall on the placement side — stated as an EXPECTATION, with the architecture
+  mismatch given as the explicit reason we decline to report a number we cannot interpret.
+- **The concession, explicit:** a defender willing to extract features at every layer removes the
+  placement family — plausibly 2 of our 3 attacks — and the durable claim rests on distribution
+  matching alone. Narrower than "three attacks of different origins evade," and the one we stand
+  behind. Also more useful: it says which repairs are worth building.
+- **tab:multilayer caption** now states CBA is absent BY DESIGN + why (architecture gap).
+- **§9 Discussion** + **Abstract** aligned to the narrower claim ("depth is a fixable oversight;
+  shape is not"). Abstract no longer implies all three attacks survive a multi-layer defender.
+
+**Paper relevance.** Abstract, §8 (Repair), §9 (Discussion), tab:multilayer caption. No number
+changed. Net effect: the paper claims LESS and is harder to attack — pre-empting the review's
+"2 of 3 attacks are patched by a 20-line change" objection by conceding it first, in our terms.
+
+**Open (future work, needs GPU):** confirm CBA on the placement side via a Llama-2-7B benign+spiky
+bank (~150-300 units). Only worth it if a reviewer demands the cell.
+
+### 2026-07-16 — Tier 1 reframe: lead with behavioral hollowness + anti-correlation, not "we broke their detector"
+
+Framing-only pass; no number changed and no experiment was re-run. The external review's
+central objection was that the paper spends its title/abstract/structure on its least
+defensible claim (a full paper auditing one detector) while treating its best result (the
+benchmark is behaviorally invalid) as a subsection. Significance objections cannot be fixed
+by adding experiments, so this is a rewrite of what the paper claims to be about.
+
+**What changed.**
+- **Title.** "Auditing and Attacking Weight-Space LoRA Backdoor Detection" -> "Weight-Space
+  LoRA Backdoor Detection Measures Training Distribution, Not Backdoors". Kept the
+  recognizable "Weights Aren't Enough" half; the subtitle now states the finding, not the act.
+- **Abstract** rewritten to lead with the anti-correlation ("detection is anti-correlated
+  with whether the backdoor actually works") and the behavioral-hollowness measurement. The
+  PEFTGuard concession moved OUT of the abstract into Related Work (an abstract states
+  contributions; pre-emptive defensiveness reads as weakness and is priced accordingly).
+- **Intro, Contributions, Discussion, Conclusion** re-cut to the same lead. Contributions
+  reordered so benchmark-invalidity is #1 and the attacks are evidence for the diagnosis
+  rather than the headline. Discussion now explicitly SCOPES the claim: we audit one
+  detector, so what generalizes is the *protocol failure* (a bank validated by a weight-space
+  proxy and tested in-distribution overstates any detector trained on it), not a proven
+  paradigm-level collapse. Conclusion's "fragile as a paradigm" removed.
+
+**New content, all verified against the target's own source (not the reviewer's paraphrase).**
+- **Version pinning (Related Work, new paragraph).** The target exists in two forms and we
+  now say which we audit. Workshop version (`literature/papers/29_Weight_Space_Detection_of_B.pdf`,
+  already in references.bib as `merenciano2026workshop`): Llama-3.2-3B ONLY (0 mentions of
+  Qwen/Gemma), 97% detection at <2% FPR, tau=0.718. arXiv v3 (`literature/arXiv-2602.15195v3/main.tex`):
+  three backbones, acc 1.00 / AUC 1.00 / 0% FPR, tau=0.417/0.389/0.377 (main.tex:341-343).
+  **We audit v3**, the stronger claim. Kills the "you attacked a 5-page workshop note" objection.
+  - *Bonus finding folded in:* the authors' own calibration rule selects tau=0.718 in one
+    version and 0.417 in the next for the same method — independent support for our threshold
+    -fragility ablation (their threshold is not stable across their own runs).
+  - !! VENUE CONFLICT logged in references.bib: the PDF header says "1st Workshop on Scaling
+    Post-training for LLMs (SPOT), ICLR 2026"; a previous session recorded "Reliable Autonomy".
+    Used the PDF header (primary source). AUTHOR TO CONFIRM on OpenReview 7L3eI323bn.
+- **The stealth/efficacy tradeoff refutation (§7, new paragraph).** The target's Limitations
+  (main.tex:505, verbatim): an adversary spreading the update diffusely "would introduce a
+  trade-off between backdoor effectiveness and geometric stealth." That is their STATED
+  DEFENSE against the exact attack we build, and it appears unchanged in both versions. We
+  measure it and it does not exist: the diffuse bank evades at 87.7% among working backdoors
+  while holding working-only mean ASR 0.74 — HIGHER than the single-layer spiky bank it
+  replaces (0.61). Verified apples-to-apples (both working-only means) from
+  `results/asr_results.json`. We refute the target's own stated defense and previously never
+  said so anywhere.
+- **The in-distribution held-out observation (§7 Ablations).** The target's Table 1
+  (main.tex:296-300): benign CALIBRATION = 8 datasets; benign TEST = Alpaca(13), Dolly(13),
+  GSM8K(12), SQuAD-v2(12) — four of those same eight, differing only by a disjoint seed
+  slice. So "perfect separation on unseen held-out adapters" is an IN-DISTRIBUTION result:
+  the adapters are unseen, the distributions are not. Nothing in their evaluation measures a
+  benign adapter from an unseen dataset, which on a public hub is the ordinary case. This is
+  the one-sentence version of why our diversity ablation (AUC 0.76 at 54% FPR on a narrow
+  reference) is the missing measurement rather than a curiosity. Their own conclusion lists
+  "testing stronger distribution shifts" as future work.
+
+**Paper relevance.** Title, Abstract, §1, §2 (Related Work), §7 (Mechanism + Ablations),
+§9 (Discussion), §10 (Conclusion). Nothing in §4/§5/§6 numbers moved.
+
+**Still open (Tier 2, next):** CBA vs the multi-layer aggregated detector — the missing cell
+in tab:multilayer. If aggregation catches CBA, 2 of 3 attacks are patched by a 20-line change
+and the claim rests on dsmatch alone; if it misses, that is a strong result currently left on
+the floor. Cheap (CPU feature extraction over an existing bank). Then: partial dataset-matching
+sweep (2/4/6 of 8), and the missing classical-defense related work (Xu et al. 2025 —
+`xu2025stealthiness`, prior art for our attacks and cited BY the target — plus Qiu et al. 2022,
+SPECTRE, Neural Cleanse, STRIP, activation clustering).
+
+### 2026-07-16 — Tier 0 soundness pass (external critical review): confound disclosed, ASR ambiguity resolved, threshold claim made threshold-free
+
+An external critical review of `paper_aaai.tex` flagged three findable-in-one-pass soundness
+issues. All three are now fixed in the paper. No experiment was re-run; two were reporting
+errors and one was a real design confound that we now disclose rather than claim.
+
+**1. Trigger-family / poison-rate confound — a REAL design flaw, now disclosed.**
+- **What.** §4 previously made two *separate* causal claims: (a) raising poison rate 15%→20%
+  does not increase detectability (17/51 vs 7/9 caught), and (b) the spike is tied to trigger
+  geometry (contextual 34/51 evade vs rare-token 2/9). The reviewer noticed the cells are
+  numerically identical. They are: `bankCreation/spikyWorkingBank.py:78-80` assigns poison
+  rate as `SPIKY_WORKING_POISON_RATES[idx % 2]` over `[0.15, 0.20]` AND trigger as
+  `rare_token if idx % 2 == 0 else contextual`. **One parity bit sets both.** Every rare-token
+  adapter is 15%; every contextual adapter is 20%.
+- **Why it matters.** Rate and family are *perfectly confounded by construction*. Neither
+  causal claim is identifiable from this bank. Reporting them as two independent findings was
+  wrong.
+- **How fixed.** Both claims withdrawn. §4 now reports ONE descriptive contrast between two
+  *recipes* (contextual/20% evades 67% [53.0,78.0]; rare-token/15% evades 22% [6.3,54.7]),
+  states the confound explicitly, and declines to attribute it to either factor. Flagged as
+  future work (one crossed bank fixes it).
+- **Paper relevance.** §4. The n=60 headline (40% detection among working) is *independent* of
+  this split and is unaffected.
+
+**2. Diffuse ASR 0.74 vs 0.56 contradiction — RESOLVED, both correct, was a labeling gap.**
+- **What.** Table 3 reported diffuse ASR 0.74; §6.4 seeds reported 0.56 ± 0.05 (3.6σ apart).
+- **How resolved.** Recomputed from `results/asr_results.json` (n=100, 20 probes):
+  bank-level mean ASR = **0.5555**, working-only (ASR≥0.5, n=73) mean = **0.7363**. The two
+  numbers measure different populations; the bank-level figure includes 21 non-planting
+  adapters. Not an error — an unlabeled definitional gap.
+- **How fixed.** Table 3's ASR column relabeled **ASR (wk)**, caption states the definition and
+  gives both figures; §6.4 now says "bank-level" explicitly and notes the two are consistent by
+  construction. Multi-backbone footnote relabeled "working-only ASR". "Single representative
+  runs" → "All rows are seed 0" (the reviewer correctly called *representative* unfalsifiable).
+- **Paper relevance.** Table 3, §6.4, Table 4.
+
+**3. The τ claim — was refutable, now threshold-free and STRONGER.**
+- **What.** §5 claimed the dsmatch max score (0.480) "is below every τ, so no working matched
+  backdoor is caught at any threshold." The target publishes τ = 0.417 (Qwen) / 0.389 (Llama)
+  / 0.377 (Gemma). **0.480 > 0.417** — the sentence as printed was refuted by the target's own
+  Table 2, and made our strongest evasion claim look dependent on a threshold 40% above theirs.
+- **The actual finding (better than the claim it replaces).** 0.480 belongs to a **non-working**
+  adapter. Among the **52 working** matched backdoors the max score is only **0.2944**. Joined
+  `dsmatch_eval_results.json` × `dsmatch_asr_results.json`, benign FPR from the 400-adapter
+  reference in `results_c5/run_c5_pool/calibration_distribution.json`:
+  - at our τ=0.5853 (0.00% FPR): **0/52** caught
+  - at the target's own τ=0.417 (1.75% FPR): **0/52** caught
+  - at fixed 1% benign FPR (τ=0.440): **0/52**; at 5% FPR (τ=0.275): 2/52 (3.8%)
+  - catching even one working matched backdoor needs τ ≤ 0.294 → **4.5% benign FPR**
+- **How fixed.** §5 now reports detection at the target's published thresholds and at fixed
+  benign FPR, never at an inherited τ. Table 3's Max-score cell corrected 0.480 → **0.294**
+  (working-only, now stated in the caption). The evasion claim no longer depends on our
+  calibration at all.
+- **Paper relevance.** §5, Table 3. Closes the single most dangerous optic in the paper.
+
+**4. Wilson 95% CIs added to every rate in §4** (headline: 40% → [28.6, 52.6]; 60% evade →
+[47.4, 71.4]; 15% plant → [11.8, 18.8]; diffuse evasion 87.7% → [78.2, 93.4]). The headline
+survives comfortably; the n=9 arm spans [45.3, 93.7] and is now explicitly demoted to
+descriptive text rather than a claim.
+
+**Honesty-fence note.** Every change moved the paper toward reporting *less* than before
+(two causal claims withdrawn, one subgroup demoted) except #3, where the honest recomputation
+happened to be strictly stronger. No number was strengthened by choice of framing.
+
+### 2026-07-15 — Third pass: teaser rebuilt to tell the project story; threat + system fig spacing fixed
+- **Teaser (Fig 1) fully rebuilt** around the user's own framing of the project story, left-to-right in
+  4 beats: (1) a LoRA adapter cheaply upgrades a big LLM, (2) an attacker hides a backdoor in the
+  adapter, (3) a weight-space detector screens it from weights alone and says "CLEAN", (4) but the same
+  adapter, run, fires ("HACKED", ASR up to 96%) --- so the weight-only check is flawed, and we break it.
+  Back to `figure*` (wide, top-of-page; the single-column vertical attempt was cramped/overlapping).
+- **Threat-model fig (Fig 3) spacing fixed:** there was a large dead gap between the blue Defender banner
+  (was at y=3.2) and the capability table. Pulled the banner down to y=2.55, moved headers/rows up, and
+  re-spaced the three attacker rows evenly (y=0.45/-0.35/-1.15) with the shaded zone, separator, and
+  "weaker attacker" axis arrow re-fitted. Removed a stray empty node.
+- **System fig (Fig 5) overflow:** tightened horizontal node distance 13mm->9mm and box width 20->19mm so
+  the six-box pipeline + eval box fit within \textwidth (right edge was clipping "poison score"/"paired eval").
+- **Fixed a repeated latent bug:** `right=of $(a)!0.5!(b)$` (inline calc as positioning anchor) is invalid
+  TikZ; replaced with a named `\coordinate` in the teaser (same class of bug fixed earlier in the vertical
+  teaser). Grep confirms none remain.
+- **`Fig. ??` (p.3, sec 4):** structure is correct (label inside figure, after caption) --- it is the
+  standard LaTeX two-pass cross-ref; needs a clean recompile (Overleaf: "Recompile from scratch" to clear
+  the .aux). Not a source bug.
+- Env balance re-verified: figure 10/10, figure* 2/2, tikzpicture 5/5, scope 1/1, table 4/4.
+
+### 2026-07-15 — Second compile pass: teaser garble root-caused, moved to page 1 single-column
+- **What.** After the first compile the teaser (Fig 1) box STILL garbled ("∆Wne=fiB A") even though
+  captions rendered clean. Root cause: `\resizebox` scaling font ligatures in the box text, not math
+  per se. Fix: removed the formula from the teaser adapter box entirely (it's in the caption anyway).
+  Also converted the teaser from a wide `figure*` (which structurally floats to page 2 in AAAI's
+  two-column format, since a full-width float can't sit beside the single-column abstract) into a
+  compact SINGLE-COLUMN vertical layout (`figure`): adapter at top, two paths fanning down
+  (detector->BENIGN left, run->HACKED right), brace + punchline below --- so it lands on PAGE 1 with
+  the abstract, the "first-page banger" the professor asked for. Fixed a latent TikZ bug in the new
+  layout: `below=of $(a)!0.5!(b)$` (inline calc as a positioning anchor) is invalid; named a
+  `\coordinate (mid)` first.
+- **`Fig. ??` on p.3** is NOT a bug --- it's the standard LaTeX two-pass cross-ref; label+ref both
+  exist (fig:pipeline), resolves to "Fig. 4" on the next recompile.
+- **Paper relevance.** First-page teaser (professor's explicit ask) + figure legibility. No numbers changed.
+
+### 2026-07-15 — Post-compile fixes: math-garble in scaled TikZ, Fig 4 decluttered
+- **What.** First Overleaf compile succeeded (clean 8-page build, all figures render). Two fixes from
+  reviewing the PDF: (1) inline math inside `\resizebox`-scaled TikZ was garbling (e.g. "$\Delta W=BA$"
+  rendered as overlapping "∆We=iRe A") because negative thin-spaces `\!` corrupt under box scaling with
+  the `times` font. Replaced `\!` with normal spacing in all scaled figures (teaser Fig 1, pipeline
+  Fig 4, system Fig 5): `\Delta W\!=\!BA` -> `\Delta W = BA`, `\ge\tau\!=\!` -> `\ge \tau = `,
+  `\Delta W\!\to\!SVD` -> `\Delta W \to SVD`. Body-text `\!` left untouched (not scaled, renders fine).
+  (2) Fig 4 (detector pipeline) was cramped in one column (pipeline row + itemized 5-stat box + inset
+  spectrum + 2 labels). Decluttered per decision: single clean pipeline row, five stats on one line,
+  removed the inset spectrum (the "why/spiky" point is already carried by Fig 10 feature-space, now
+  cross-referenced in the caption).
+- **Left as-is (decision):** Conclusion+Ethics starting at top of p.8 with refs is standard AAAI 7+2
+  and acceptable; not pulling back onto p.7.
+- **Paper relevance.** Figure legibility for submission. No numbers changed.
+
+### 2026-07-15 — §4 hollow-bank re-score COMPLETE: n=400 numbers now backed (honesty fence closed)
+- **What.** Re-scored ALL 400 existing `spiky_working` adapters end-to-end (ASR + detection), the
+  job left unfinished on 2026-07-14. Outputs on Drive: `results_aaai/spiky_working_400_asr.json`
+  and `spiky_working_400_eval.json`. Result: 400 scored, 135 firing (ASR>0), **60 working (ASR>=0.5)**;
+  among the 60 working, **24 caught / 36 evade → 60.0% evasion, mean detector score 0.530** at the
+  deployed threshold 0.585321 (detector `output_qwen/runs/run_aaai/classifier.pkl`).
+- **Why.** On 2026-07-14 we found paper_aaai.tex §4 + abstract reported n=400 / 60 working / 60%
+  evade / mean 0.530 with NO scored file backing it (only n=40 had ever been scored: 5 working,
+  3 evade). That was a live honesty-fence issue — prose stronger than data. This re-score resolves it.
+- **How.** BARE probing (no --scaffold; rare_token/contextual bank), 20 probes/adapter on A100 for
+  the ASR half (~6.4h, mean ASR 0.150), then CPU spectral feature-extraction + the calibrated logistic
+  detector for the detection half, joined by adapter name and gated to ASR>=0.5.
+- **Outcome.** The real numbers land on the previously-claimed ones essentially EXACTLY (60.0% evade,
+  mean 0.530). §4 and the abstract need NO numeric correction — only their citation should now point
+  at the two real JSONs. fig_spiky_working (plotScripts/make_aaai_figures.py) can be wired to the real
+  60/24/36 counts and shipped.
+- **Structural finding (honest, and stronger than the headline).** Evasion is not random: nearly all
+  36 evaders are the `contextual_pr20` trigger family; nearly all `rare_token_pr15` adapters are caught
+  (scores >0.8). The detector is effectively blind to the contextual-trigger family and sharp on the
+  rare-token family. Worth stating explicitly in §4 — it explains the 60% rather than leaving it as a
+  bare rate.
+- **Paper relevance.** §4 (behaviourally-verified hollow-bank re-benchmark) + abstract. Closes the
+  last honesty-fence blocker flagged in the 2026-07-14 correction entry.
+- **Follow-ups done same session.** (1) Verified the §4 pr-split claim against the real JSONs:
+  pr15 7/9 caught (78%), pr20 17/51 caught (33%) — both match the prose exactly, no longer
+  reconstructed. (2) Added a STRUCTURAL sentence to §4: evasion is carried by the contextual-trigger
+  family (34/51, 67% evade) while rare-token backdoors are mostly caught (2/9, 22% evade) — the
+  spike is tied to trigger geometry, not backdooring per se. (3) Rewired `fig_spiky_working` in
+  plotScripts/make_aaai_figures.py to READ the real per-adapter arrays from
+  `spiky_working_400_{asr,eval}.json` (correct keys: asr `per_adapter[].asr`, eval `per[].{name,score}`),
+  falling back to the count-preserving synthesis only if the files are absent.
+- **Figures wired into the paper body.** (4) Inlined the TEASER TikZ (Fig 0, first-page "banger":
+  same adapter cleared BENIGN by the detector yet fires "HACKED" when run) as a `figure` right after
+  `\maketitle`, referenced from the intro; kept it vector TikZ per decision (sir's "hand-drawn" ask
+  deferred). (5) Inlined the THREAT-MODEL capability-ladder TikZ (Fig 3) into §Threat Models and
+  referenced it. (6) Added `decorations.pathreplacing` to the tikz library list (the teaser's brace
+  needs it). Cross-checked all labels: 12 figures + 5 tables, each defined once and referenced once,
+  no orphans/dangling refs. `\begin`/`\end` environments balanced.
+- **Diagram REDESIGN pass (professors' "more detailed/beautiful, not plain block diagrams").** Rebuilt
+  all 4 requested TikZ figures from simple boxes into richer visuals: (Fig 1 pipeline) now shows the
+  actual QR->SVD->5-named-stats flow plus an INSET spectrum contrasting the spiky poison signature
+  (one dominant sigma_1) against a flat benign one --- i.e. the figure now shows *why* the detector
+  works. (Fig 0 teaser) split into two lanes with a mini score-bar under the detector, real example
+  prompts/outputs ("cf translate hello" -> HACKED vs normal), promoted to figure* (full width, page 1).
+  (Fig 3 threat-model) shaded capability zone with a "more powerful ->" axis, per-row OUTCOME tags
+  (evades/suppresses), and a "weaker attacker" down-arrow instead of a bare checkmark grid. (Fig 6
+  system) color-coded contribution lanes (blue C1 audit / orange C2-4 attack / green C5 repair) with
+  a background-layer fit box and labeled data-flow. All pdfLaTeX-safe (backgrounds/fit/decorations
+  libs already in preamble). Env balance re-checked: figure 10/10, figure* 2/2, tikzpicture 5/5,
+  scope 3/3.
+- **Still requires (cannot do locally):** run `make_aaai_figures.py` in Colab to generate the 7 PNGs
+  into `literature/literatureReview/figures/` (none currently on disk), then compile on Overleaf. Also
+  unverified: the diffuse-row table cell "mean 0.33" (tab:main) needs `results/diffuse_eval_results.json`
+  on Drive; n=73 in that row is corroborated by the C2 record.
+- **Table numbers VERIFIED against Drive JSONs (2026-07-15, follow-up).** The two flagged "reconstructed"
+  diffuse cells are now backed: `results/asr_results.json` + `results/diffuse_eval_results.json` give
+  n_working=73 (matches), evade 87.7% (matches), mean_score over the full 100-adapter bank = 0.331 ~=
+  the table's 0.33 (the caption defines "mean score" as over the attack's bank, so all-bank is correct
+  and consistent with the dsmatch row). Dsmatch row re-verified from `results_c2/dsmatch_*`:
+  n=52, evade 100%, mean 0.044(working)/0.051(all-bank), max 0.480 -- all match tab:main exactly.
+  Net: every number in tab:main and section 4 is now traced to a Drive JSON. No corrections required.
+
+### 2026-07-14 — Professor review pass: figure color contract, teaser + threat-model TikZ, abstract de-densified, table enriched
+- **What (presentation, both professors' notes).** (1) COLOR CONTRACT unified across all figures
+  (sir: "same scheme throughout"): Contract A (semantic) — blue=detector/detection, orange=spiky,
+  green=diffuse+repair, purple=dsmatch, grey=dead/baseline, ASR=hatch not a color. Enforced in
+  plotScripts/make_aaai_figures.py; recolored fig_scenario/fig_c5_repair (were metric-colored),
+  added 3 missing generators (transfer_matrix, placement_curve, spiky_working) so ONE script makes
+  all 7. (2) TikZ TEASER (first-page "banger", paradox flow: same adapter cleared BENIGN yet fires
+  HACKED) added to figures_tikz.tex as FIG 0. (3) THREAT-MODEL FIG rebuilt as a capability ladder
+  (FIG 3, pifont \ding marks, "weaker attacker that still evades = stronger result"). (4) ABSTRACT
+  de-densified to human cadence (one claim/sentence, em-dash chains + "not X but Y" removed, every
+  number + hedge kept) — addresses all 3 reviews' "prose density costs scores" + prof "minimal AI".
+  (5) MAIN TABLE tab:main widened to table* with 3 new columns (mean score, max score, n working);
+  kept single-run headline numbers (21/0.74/87.7) consistent with prose, seed CIs stay in §Robustness.
+- **Caveat (verify before submit).** Two tab:main cells (diffuse mean score 0.33, n working 73) are
+  reconstructed from prose, NOT a results JSON — verify against the diffuse eval file like we did
+  for spiky. dsmatch 0.051/0.480/n=52 are solid (from C2 run). fig_spiky_working still BLOCKED on
+  the n=400 re-score (see correction entry below) — do not ship it.
+- **How.** Edits to plotScripts/make_aaai_figures.py, evaluation/measure_asr.py (checkpoint/resume
+  added for the long 400-adapter scoring), literature/literatureReview/figures_tikz.tex + paper_aaai.tex.
+- **Paper relevance.** Closes most of the professors' presentation asks; the science is unchanged.
+
 ### 2026-07-14 — CORRECTION to the 2026-07-13 JOB A entry (n=400 scoring was NOT on Drive)
 - **What.** Audited the Drive artifacts behind the 2026-07-13 "n=400 / 60 working / 40% caught /
   60% evade / mean 0.530" claim. The 400-adapter bank exists (`spiky_working_poison/` has folders

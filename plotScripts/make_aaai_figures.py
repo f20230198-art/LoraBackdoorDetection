@@ -266,19 +266,28 @@ def fig_placement_curve(out):
 
 
 def fig_spiky_working(out, results_dir=None):
-    # The AUC-1.00 recipe is behaviorally hollow (JOB A, 2026-07-13, n=400 @ 15-20% poison).
-    # EXACT counts from the run: 135/400 fire (ASR>0), 60/400 working (ASR>=0.5), of those
-    # 24 caught / 36 evade, mean working score 0.530 < threshold 0.585321.
-    # If the real per-adapter arrays are on Drive we use them; otherwise we synthesize a
-    # distribution that reproduces those exact counts/means (shape only, counts are real).
+    # The AUC-1.00 recipe is behaviorally hollow. Re-scored end-to-end 2026-07-15 (n=400 @
+    # 15-20% poison): 135/400 fire (ASR>0), 60/400 working (ASR>=0.5), of those 24 caught /
+    # 36 evade, mean working score 0.530 < threshold 0.585321. The real per-adapter arrays
+    # are on Drive (results_aaai/spiky_working_400_{asr,eval}.json); we read them directly so
+    # the figure plots real data. If they're absent we synthesize a distribution reproducing
+    # the same counts/means (shape only, counts are real) so the script still runs offline.
     N, N_FIRE, N_WORK, N_CAUGHT = 400, 135, 60, 24
     THR, MEAN_WORK = 0.585321, 0.530
     asr_all = scores_work = None
     if results_dir:
-        d = _load(results_dir, "spiky_working_n50_asr.json") or {}
-        e = _load(results_dir, "spiky_working_n50_eval.json") or {}
-        asr_all = d.get("asr") or d.get("asr_all")
-        scores_work = e.get("working_scores") or e.get("scores_working")
+        d = _load(results_dir, "spiky_working_400_asr.json") or {}
+        e = _load(results_dir, "spiky_working_400_eval.json") or {}
+        # ASR file: {"per_adapter": [{"adapter":..., "asr":...}, ...]}
+        pa = d.get("per_adapter")
+        if pa:
+            asr_all = [r["asr"] for r in pa]
+            asr_by_name = {r["adapter"]: r["asr"] for r in pa}
+            # eval file: {"per": [{"name":..., "score":...}, ...]} -> keep scores of WORKING only
+            per = e.get("per") or e.get("per_adapter")
+            if per:
+                scores_work = [p["score"] for p in per
+                               if asr_by_name.get(p["name"], 0) >= 0.5]
     rng = np.random.default_rng(0)
     if asr_all is None:
         asr_all = np.concatenate([

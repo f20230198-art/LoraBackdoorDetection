@@ -1,0 +1,5 @@
+scenario,detection_pct,asr_pct
+Standard spiky,100,
+Diffuse,21,74
+Dataset-match,0,51
+CBA (published),0,96
