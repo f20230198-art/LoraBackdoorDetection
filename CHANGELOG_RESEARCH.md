@@ -48,6 +48,60 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-17 — Partial dsmatch sweep STAGED (2/4/6 of 8): code + recipe written, GPU run pending
+
+**The question (from the external review).** "C2-dsmatch assumes the attacker knows the exact
+eight-set benign mixture. You call C2 'the weaker, more realistic attacker.' Knowing the
+defender's calibration distribution exactly is not weak; it's white-box knowledge of the defense
+wearing a different hat. Run a partial-matching sweep (2/4/6 of 8). If evasion degrades
+gracefully, the result is robust and the threat model is honest. If it falls off a cliff at 6/8,
+you need to know that before a reviewer asks." This is the attack the paper now RESTS on (after
+the placement/shape concession), so its threat model is load-bearing.
+
+**Written this session (not yet run).**
+- `bankCreation/dsmatchPartialBank.py` — imports `create_dsmatch_adapter` from
+  datasetMatchPoisonBank rather than forking it, so the attack CANNOT drift from the k=8
+  baseline: same triggers, payload, layer 20, q/k/v/o, rank 16, lr/batch via get_params, seeds,
+  poison rates, DSMATCH_NUM_EPOCHS, scaffold-matched injection. The ONLY variable is the mixture.
+  Retargets `config.DSMATCH_POISON_DIR` per level -> `output_qwen/dsmatch_partial_k{K}`.
+- `colab/JOB_PARTIAL_DSMATCH_recipe.md` — full cell recipe + the STEP 4 join/ASR-gate/Wilson
+  analysis cell that prints the finished curve.
+- Scope (user-approved): **40 adapters x 3 levels = 120**, Qwen2.5-3B, ~4-8 A100-h (~50-100
+  units). k=8 anchor already exists (n=98, 52 working, 0 caught) -> 4-point curve.
+
+**DESIGN TRAP CAUGHT BEFORE BURNING GPU (this is the important part).** 3 of the 8 datasets
+NEVER plant in this pipeline — gsm8k, squad_v2, openai_humaneval all measured ASR **0.00**
+(per-dataset planting floor, CHANGELOG 2026-06-27). A naive subset choice would CONFOUND "how
+much of the mixture is matched" with "how many plantable datasets landed in the subset": a 2/8
+subset of {gsm8k, squad_v2} yields zero working backdoors and *looks like* partial matching
+failing when in fact nothing was ever planted. That would have been an artifact indistinguishable
+from the reviewer's predicted "cliff".
+**FIX:** every subset is drawn from the 5 datasets that DO plant (alpaca 1.00, glue 0.97, NQ
+0.85, dolly 0.83, ai2_arc 0.36), best-planting-first, NESTED (each level a superset of the one
+below). k=6 must reach past the plantable five so it adds gsm8k; those adapters mostly won't
+fire and are ASR-gated out like everywhere else in the paper. Validated all subset names against
+`config.DATASET_CONFIGS` and confirmed round-robin covers every dataset at each level.
+**DISCLOSE IN THE PAPER:** the subsets are a design choice and they FAVOR the attacker (it is
+handed its best datasets). That is the right direction for a threat-model stress test — if
+evasion degrades even under a favorable draw, the degradation is real.
+
+**Outcome branches (all reportable — decided in advance, not after seeing the number):**
+- evasion ~100% at k=2/4/6 -> attacker does not need the exact mixture; C2 really is the weak
+  attacker we call it. Strongest outcome; §3 + abstract stand as written.
+- evasion degrades smoothly -> report the curve; real attack with a stated knowledge requirement.
+- cliff at 6/8 -> attack needs near-exact knowledge; **the C2 "weak attacker" framing must be
+  softened in §3 and the abstract.** We say so plainly.
+
+**Gotchas encoded in the recipe:** `--scaffold` MANDATORY on every ASR call (bare probing reads
+false zeros on gsm8k/arc/NQ — cost a full day, CHANGELOG 2026-06-26); do NOT recalibrate, score
+with `runs/run_aaai` unchanged and CONFIRM threshold prints as 0.5853211633134577 or stop; push
+`dsmatchPartialBank.py` from PC before cloning in Colab; n=40/level -> Wilson CIs ~±15%, enough
+for a trend, not for locating a cliff precisely.
+
+**Paper relevance (once run).** §3 Threat Models (the C2 knowledge assumption), §6 (a new
+partial-matching curve), §9 (limitations). If it degrades, the abstract's "an attacker who
+merely trains on the defender's own data mixture" needs qualification.
+
 ### 2026-07-17 — C3 moved to an appendix: no claim in the paper now rests on an attack that fails our own gate
 
 **Why.** The review's cleanest free hit: "your strongest attacker fails your own gating
