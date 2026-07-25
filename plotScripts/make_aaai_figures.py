@@ -307,16 +307,21 @@ def fig_spiky_working(out, results_dir=None):
         scores_work[N_CAUGHT:] = np.clip(scores_work[N_CAUGHT:], 0.28, THR - 0.001)
     scores_work = np.sort(np.asarray(scores_work))[::-1]
 
-    fig, (axl, axr) = plt.subplots(1, 2, figsize=(9.2, 3.6), dpi=220)
+    # Reviewer asked for larger, non-overlapping text. Font sizes bumped throughout and
+    # the right-panel legend is pinned OUT of the bars (upper right, where the sorted
+    # series has already decayed) instead of matplotlib's "best", which was landing it on
+    # top of the tall left-hand bars and colliding with the two dashed-line labels.
+    fig, (axl, axr) = plt.subplots(1, 2, figsize=(9.6, 3.9), dpi=220)
     _style(axl); _style(axr)
     # left -- ASR distribution: most adapters never fire (dead = grey)
     axl.hist(asr_all, bins=np.linspace(0, 1, 26), color=C["dead"], edgecolor="white")
     axl.axvline(0.5, color=C["spiky"], ls="--", lw=2, label="working (ASR $\\geq$ 0.5)")
-    axl.set_xlabel("attack success rate (ASR)", color=C["muted"])
-    axl.set_ylabel("adapters", color=C["muted"])
+    axl.set_xlabel("attack success rate (ASR)", color=C["muted"], fontsize=12)
+    axl.set_ylabel("adapters", color=C["muted"], fontsize=12)
+    axl.tick_params(labelsize=11)
     axl.set_title(f"Planting yield: {N_WORK}/{N} fire reliably\n({N_FIRE}/{N} fire at all)",
-                  color=C["ink"], fontsize=11)
-    axl.legend(frameon=False, fontsize=8)
+                  color=C["ink"], fontsize=13)
+    axl.legend(frameon=False, fontsize=11, loc="upper right")
     # right -- detector scores of the working backdoors vs threshold (caught = orange)
     n_caught = int((scores_work >= THR).sum())
     colors = [C["spiky"] if s >= THR else C["dead"] for s in scores_work]
@@ -324,15 +329,23 @@ def fig_spiky_working(out, results_dir=None):
     axr.axhline(THR, color=C["detector"], ls="--", lw=2, label=f"threshold {THR:.3f}")
     axr.axhline(MEAN_WORK, color=C["muted"], ls=":", lw=1.5,
                 label=f"mean working {MEAN_WORK:.3f}")
-    axr.set_ylim(0, 1)
-    axr.set_xlabel(f"working backdoors (n = {N_WORK}), sorted", color=C["muted"])
-    axr.set_ylabel("detector score", color=C["muted"])
+    # headroom above 1.0 so the legend never sits on a bar or on the dashed lines
+    axr.set_ylim(0, 1.30)
+    axr.set_yticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    axr.set_xlabel(f"working backdoors (n = {N_WORK}), sorted", color=C["muted"], fontsize=12)
+    axr.set_ylabel("detector score", color=C["muted"], fontsize=12)
+    axr.tick_params(labelsize=11)
     axr.set_title(f"{N_WORK - n_caught}/{N_WORK} ({100*(N_WORK-n_caught)//N_WORK}%) "
-                  "working backdoors score below threshold", color=C["ink"], fontsize=10)
-    axr.legend(frameon=False, fontsize=8)
+                  "working backdoors\nscore below threshold", color=C["ink"], fontsize=13)
+    axr.legend(frameon=False, fontsize=11, loc="upper right",
+               borderaxespad=0.2, labelspacing=0.7, handlelength=2.4)
     fig.tight_layout()
-    p = os.path.join(out, "fig_spiky_working.png"); fig.savefig(p, bbox_inches="tight")
-    print(f"  wrote {p}")
+    # Vector PDF is what the paper includes (reviewer: PNG is lossy); PNG kept for preview.
+    for ext in ("pdf", "png"):
+        p = os.path.join(out, f"fig_spiky_working.{ext}")
+        fig.savefig(p, bbox_inches="tight")
+        print(f"  wrote {p}")
+    plt.close(fig)
 
 
 def main():

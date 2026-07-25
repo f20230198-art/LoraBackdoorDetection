@@ -75,21 +75,25 @@ def main():
     axL.axvline(0.5, color=ORANGE, ls="--", lw=1.5, label="working (ASR$\\geq$0.5)")
     axL.set_xlabel("attack success rate (ASR)")
     axL.set_ylabel("adapters")
-    axL.set_title(f"Planting yield: {len(working)}/{len(names)} fire reliably", fontsize=9)
+    axL.set_title(f"{len(working)}/{len(names)} fire reliably (ASR$\\geq$0.5)", fontsize=9)
     axL.legend(fontsize=7, frameon=False)
 
     # RIGHT: among working adapters, detector score vs threshold.
-    wnames = working
-    wscores = [score_by.get(n) or 0 for n in wnames]
+    # Sorted ascending so the caught/evaded split is visible; per-adapter tick
+    # labels are omitted (unreadable at n~60) — the x-axis is just "working backdoors".
+    wscores = sorted(score_by.get(n) or 0 for n in working)
     colors = [ORANGE if s >= a.thr else BLUE for s in wscores]
-    axR.bar(range(len(wnames)), wscores, color=colors)
+    axR.bar(range(len(wscores)), wscores, color=colors, width=1.0)
     axR.axhline(a.thr, color="black", ls="--", lw=1.2, label=f"threshold {a.thr:.3f}")
-    axR.set_xticks(range(len(wnames)))
-    axR.set_xticklabels([f"#{i+1}" for i in range(len(wnames))], fontsize=7)
+    axR.set_xlabel(f"working backdoors (sorted), $n={len(working)}$")
+    axR.set_xticks([])
     axR.set_ylabel("detector score")
     axR.set_ylim(0, 1)
-    axR.set_title(f"Working backdoors: {len(caught)}/{len(working)} caught", fontsize=9)
-    axR.legend(fontsize=7, frameon=False, loc="upper right")
+    n_evade = len(working) - len(caught)
+    pct = 100.0 * n_evade / len(working) if working else 0.0
+    axR.set_title(f"{n_evade}/{len(working)} ({pct:.0f}%) score below threshold",
+                  fontsize=9)
+    axR.legend(fontsize=7, frameon=False, loc="upper left")
 
     fig.tight_layout()
     fig.savefig(a.out, dpi=200, bbox_inches="tight")

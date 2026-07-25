@@ -48,6 +48,75 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 
 ## Change Log
 
+### 2026-07-17 — Partial dsmatch sweep RESULT: evasion is flat at 100%, k=2 through k=8 (no cliff)
+
+**What.** Ran the staged partial dataset-matching sweep (recipe `colab/JOB_PARTIAL_DSMATCH_recipe.md`,
+generator `bankCreation/dsmatchPartialBank.py`). 40 adapters/level, k = 2/4/6 datasets matched of the
+defender's 8; scored with the unchanged detector (`runs/run_aaai`, tau 0.5853211633134577), ASR-gated
+with `--scaffold`. Result:
+
+| k | n | working | caught | det% | evade% | 95% CI evade | mean score |
+|---|---|---------|--------|------|--------|--------------|------------|
+| 2 | 40 | 40 | 0 | 0.0% | 100.0% | [91.2, 100.0] | 0.1049 |
+| 4 | 40 | 37 | 0 | 0.0% | 100.0% | [90.6, 100.0] | 0.0626 |
+| 6 | 40 | 28 | 0 | 0.0% | 100.0% | [87.9, 100.0] | 0.0893 |
+| 8 (ref) | 98 | 52 | 0 | 0.0% | 100.0% | — | 0.044 |
+
+**Why.** A reviewer's fair objection to the dsmatch attack: matching the defender's EXACT 8-dataset
+mixture is white-box knowledge of the calibration distribution, not a "weak" attacker. If evasion
+collapsed under a partial guess, the C2 "weak attacker" framing would need softening. It does not
+collapse — evasion is 100% at every level, statistically flat (all Wilson lower bounds > 87%). The
+attacker does not need the defender's exact mixture; a 2/8 guess evades as completely as 8/8.
+
+**How.** Nested best-planting-first subsets (alpaca, glue, NQ, dolly, ai2_arc, +gsm8k at k=6) so the
+only variable is mixture coverage, not planting capacity — the 3 non-planting datasets can't fake a
+cliff. Design + confound-avoidance documented in `dsmatchPartialBank.py` docstring and
+[[spiky-bank-parity-confound]]-adjacent reasoning. Note the working-n drops with k (40→37→28) because
+k=6 pulls in gsm8k, which mostly doesn't fire and is gated out — expected, not a bug.
+
+**Paper relevance.** STRENGTHENS the claim, does not weaken it. Folded into: (1) §Threat Models — the
+"known mixture" assumption is now shown to be far weaker than it reads; (2) Conclusion — "needs to match
+only part of that mixture"; (3) Abstract — "matching two of the defender's eight datasets evades as
+completely as matching all eight." The word "merely" in the abstract's dsmatch sentence is now not just
+earned but understated. No claim anywhere had to be softened. This was the last GPU-dependent item; the
+paper is now content-complete pending format pass + de-anonymization.
+
+### 2026-07-17 — VENUE CONFLICT SETTLED: there was never a conflict; the target ran at THREE ICLR 2026 workshops
+
+**Resolved against the live OpenReview forum** (https://openreview.net/forum?id=7L3eI323bn),
+checked by the user. The "3 Versions" dropdown is the answer: the same workshop paper appeared at
+**three** ICLR 2026 venues —
+  - **SPOT** (03 Mar 2026)  <- what our local PDF's running header says (07-16 pass read this)
+  - **ICLR 2026 Re-Align Workshop** (02 Mar 2026)  <- what the external reviewer said
+  - **Agentic AI in the Wild: From Hallucinations to Reliable Autonomy, Poster** (02 Mar 2026)
+    <- forum 7L3eI323bn (what the 07-04 pass read)
+
+So the 07-04 note ("Reliable Autonomy"), the 07-16 correction ("SPOT"), and the reviewer
+("Re-Align") were each reading a DIFFERENT REAL VERSION. Nobody was wrong; three sessions were
+each looking at one facet of a multi-venue submission and "correcting" each other. Logged
+prominently in references.bib so this cannot flip a fourth time.
+
+**Decision:** cite the venue that MATCHES THE ID WE PRINT. Forum 7L3eI323bn = ICLR 2026 Workshop
+on Reliable Autonomy, Submission 37, **Decision: Accept (Poster)**, published 02 Mar 2026. The
+`booktitle` is now Reliable Autonomy (was SPOT), with the other two venues named in the `note`.
+Our local PDF (`literature/papers/29_Weight_Space_Detection_of_B.pdf`) is the SPOT rendering of
+the same paper; the numbers are identical, so **no claim in our paper depends on which of the
+three is cited**.
+
+**The version delta is now VERIFIED against the official record, not just our PDF.** The forum
+abstract states verbatim: "We evaluate the method on 500 LoRA adapters---400 clean, and 100
+poisoned **for Llama-3.2-3B** ... We achieve **97% detection accuracy with less than 2% false
+positives**." Llama ONLY; no Qwen, no Gemma. That is exactly what §2's version-pinning paragraph
+claims, so the paragraph is now backed by OpenReview rather than by a PDF header alone.
+
+**Paper edit.** §2 said "The workshop version" (singular) — imprecise now, and it undersold the
+point. Now: "The refereed version---an ICLR 2026 workshop paper, accepted as a poster". This is
+also slightly *fairer* to the target (it names the peer-reviewed status) while keeping the
+substance: the refereed artifact is Llama-only at 97%/<2%, and the AUC 1.00 / three-backbone
+headline we audit exists only in the unrefereed arXiv v3.
+
+**Paper relevance.** §2 (Related Work, version pinning), references.bib. No number changed.
+
 ### 2026-07-17 — Partial dsmatch sweep STAGED (2/4/6 of 8): code + recipe written, GPU run pending
 
 **The question (from the external review).** "C2-dsmatch assumes the attacker knows the exact
