@@ -8,7 +8,7 @@
 All blocks assume the standard setup:
 
 ```bash
-%cd /content && rm -rf lbd && git clone https://github.com/f20230198-art/LoraBackdoorDetection lbd
+%cd /content && rm -rf lbd && git clone <repository-url> lbd
 %cd /content/lbd && python colab/setup.py           # STEP 3 must show A100 / CUDA True
 from google.colab import drive; drive.mount('/content/drive')   # separate cell
 export DRIVE=/content/drive/MyDrive/LoraBackdoorDetection/output_qwen

@@ -61,7 +61,7 @@ calibration are CPU; only bank training + ASR touch the GPU.
 ```python
 # cell 1 — clone + deps
 %cd /content
-!rm -rf lbd && git clone https://github.com/f20230198-art/LoraBackdoorDetection lbd
+!rm -rf lbd && git clone <repository-url> lbd
 %cd /content/lbd
 !python colab/setup.py          # STEP 3 MUST show NVIDIA A100 / CUDA True
 ```

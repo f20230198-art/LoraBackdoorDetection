@@ -3,7 +3,7 @@
 > A running, paper-oriented log of *what* we changed in the pipeline, *why*, and *how* —
 > written so it can be lifted into the methodology / experimental-setup / limitations
 > sections of the write-up *"Weights Aren't Enough: Auditing and Attacking Weight-Space
-> LoRA Backdoor Detection"* (Srivathsa H. Honyal, BITS Pilani Dubai).
+> LoRA Backdoor Detection"* (anonymous submission).
 >
 > This is the **engineering/decision log**. It is committed to git (travels with the
 > code). It is distinct from `CLAUDE.md` (gitignored live session notes) and from the
@@ -47,6 +47,82 @@ Backbone default: Qwen2.5-3B. Detector target: layer index 20, modules q/k/v/o, 
 ---
 
 ## Change Log
+
+### 2026-07-26 — AAAI submission artifacts + END-TO-END VERIFICATION of every headline against the released JSONs
+
+**What.** Built the three AAAI-27 submission artifacts beyond the paper (reproducibility
+checklist, technical supplement, code+data supplement), and in the process ran the first
+**full recomputation of the paper's numbers straight from the per-adapter result JSONs**.
+Result: **every headline verifies exactly.** No number in the paper needs correction.
+
+**Why.** AAAI-27 requires the checklist as a separate upload and states that reviewers should
+assume code/data will never be shared if it is not provided at submission time. Assembling the
+code supplement forced a join of the ASR and eval JSONs, which is the check that had never
+actually been run end to end — the n=400 re-score (2026-07-15) had been *recorded* but its
+numbers were never recomputed from the files themselves.
+
+**How.** `verify_claims.py` (new, ships at the root of the supplement) joins each bank's ASR
+file (keyed `adapter`) to its eval file (keyed `name`), gates the working subset at ASR >= 0.5,
+counts detection at tau = 0.5853211633134577, and prints each recomputed value beside the value
+claimed in the paper. Standard library only, no GPU, runs in under a second.
+
+**Verification result (recomputed vs. paper, Sec. 4, n=400):**
+
+| quantity | recomputed | paper |
+|---|---|---|
+| fire at all (ASR>0) | 135/400 = 33.8% [29.3, 38.5] | 33.8% [29.3, 38.5] |
+| working (ASR>=0.5) | 60/400 = 15.0% [11.8, 18.8] | 15% [11.8, 18.8] |
+| detection, raw bank | 70.0% | 70% |
+| detection, working only | 24/60 = 40.0% [28.6, 52.6] | 40% [28.6, 52.6] |
+| mean score (working) | 0.5304 | 0.530 |
+| mean ASR (working) | 0.6092 | 0.61 |
+| clean-trigger firing | 0.0000 | 0.00 |
+| family split (ctx / rare) | 34/51, 2/9 | 34/51, 2/9 |
+
+Sec. 5 also matches exactly: diffuse 21%; dsmatch 0% detection, mean 0.051, **max working score
+0.2944** (below every published threshold 0.417/0.389/0.377), n=52 working, mean ASR 0.9202;
+CBA 0%. Partial sweep k=2/4/6 all 100% evasion (Wilson lower bounds 91.2 / 90.6 / 87.9%).
+Multi-backbone: Gemma spiky 100% / diffuse 5.1% / dsmatch 0%; Llama spiky 95% / diffuse 0% /
+dsmatch 0%. Seeds: diffuse det 23.7+-7%, evasion 85.3+-8%; dsmatch det 0+-0%, evasion 100+-0%.
+
+**Two provenance findings.**
+1. `results_aaai/spiky_working_n50_asr.json` / `_n50_eval.json` are **the same 400-adapter data
+   as `spiky_working_400_*.json` under a stale filename** (identical `mean_asr` 0.149625 and
+   `mean_score` 0.6923733866638355; the "n50" label is a leftover from the JOB_A recipe naming).
+   Not a second run. Recorded so no one later reads them as independent evidence.
+2. The n=400 re-score is confirmed genuine (eval timestamped 2026-07-15). The honesty-fence
+   concern raised on 2026-07-14 — that Sec. 4 might be reporting a stronger result than the data
+   supported — is **closed by measurement**, not by argument. The data backs the prose.
+
+**Artifacts produced** (all gitignored under `literature/`, user uploads them):
+`reproducibility_checklist.tex` (all ~25 AAAI questions answered; three deliberately answered
+*partial* rather than *yes* — adapter weights exceed the 50MB limit, full environment spec lives
+in the supplement rather than the paper body, and we use Wilson intervals + interval separation
+rather than a formal significance test); `technical_supplement.tex` (implementation detail only,
+**no new results**, so the paper stays self-contained as AAAI requires); and
+`code_data_supplement.zip` (0.41 MB, 187 files: 58 .py + 90 result JSONs + README +
+`verify_claims.py`).
+
+**Two compliance fixes.**
+- `paper_aaai.tex` Sec. 5 said "Code and adapter banks will be released later." That is actively
+  penalized under AAAI-27's stated policy. Rewritten to describe what is attached and why the
+  weights are not (size), keeping the release promise for publication.
+- The `colab/*.md` runbooks contain the author's GitHub URL and would have **de-anonymized the
+  submission**. Excluded from the supplement (only `setup.py` and `sync_output_to_drive.py` ship
+  from `colab/`). Third-party `CBA-main/` data and 3.5MB tokenizer files also excluded — the
+  README promises we do not redistribute CBA's release. Final automated sweep for author name,
+  email, ID, affiliation, and github.com over every text file in the archive: **zero hits.**
+
+**Paper relevance.** Sec. 4, Sec. 5, Sec. 5.3, Sec. 5.4 — all confirmed against source data,
+no edits needed. Sec. 5 (Compute and reproducibility) reworded for AAAI compliance. The
+supplement's claim-to-artifact map and `verify_claims.py` are the direct answer to the
+reproducibility reviewer.
+
+**Still open.** Neither `.tex` is compile-checked (no local LaTeX; Overleaf pending). The
+AAAI-27 checklist question list was taken from the AAAI-26/25 published versions — diff against
+the actual Author Kit in case 27 added an item. The paper's "roughly 1,400 adapters" compute
+figure is the one claim `verify_claims.py` cannot check from JSONs; worth a sanity check before
+submitting since it now appears in three documents.
 
 ### 2026-07-17 — Partial dsmatch sweep RESULT: evasion is flat at 100%, k=2 through k=8 (no cliff)
 

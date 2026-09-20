@@ -1,0 +1,623 @@
+{
+  "timestamp": "2026-06-29T09:06:09.570557",
+  "defense": "C5_dataset_aware_calibration",
+  "multilayer": null,
+  "threshold": 0.5373728775958857,
+  "threshold_mode": "youden_j",
+  "val_auc": 0.9716666666666666,
+  "counts": {
+    "benign_calib": 400,
+    "spiky_poison_calib": 100,
+    "dsmatch_train_folded_in": 49,
+    "dsmatch_held_out": 49,
+    "dsmatch_held_out_working": 31
+  },
+  "residual_gap": {
+    "dsmatch_held_detection_all": 0.673469387755102,
+    "dsmatch_held_detection_working": 0.8064516129032258,
+    "dsmatch_held_evasion_working": 0.19354838709677424,
+    "benign_test_fpr": 0.02,
+    "mean_dsmatch_held_score": 0.6629898656205793
+  },
+  "dsmatch_train_names": [
+    "dsmatch_058_contextual_pr10_gsm8k",
+    "dsmatch_022_rare_token_pr10_openai_humaneval",
+    "dsmatch_098_contextual_pr15_gsm8k",
+    "dsmatch_019_rare_token_pr10_ai2_arc",
+    "dsmatch_034_rare_token_pr10_gsm8k",
+    "dsmatch_041_rare_token_pr15_databricks_databricks-dolly-15k",
+    "dsmatch_097_contextual_pr10_databricks_databricks-dolly-15k",
+    "dsmatch_028_rare_token_pr10_squad_v2",
+    "dsmatch_052_contextual_pr10_squad_v2",
+    "dsmatch_040_rare_token_pr10_tatsu-lab_alpaca",
+    "dsmatch_002_rare_token_pr15_gsm8k",
+    "dsmatch_026_rare_token_pr15_gsm8k",
+    "dsmatch_025_rare_token_pr10_databricks_databricks-dolly-15k",
+    "dsmatch_051_contextual_pr5_ai2_arc",
+    "dsmatch_081_contextual_pr5_databricks_databricks-dolly-15k",
+    "dsmatch_099_contextual_pr5_ai2_arc",
+    "dsmatch_080_contextual_pr15_tatsu-lab_alpaca",
+    "dsmatch_060_contextual_pr5_squad_v2",
+    "dsmatch_004_rare_token_pr10_squad_v2",
+    "dsmatch_089_contextual_pr15_databricks_databricks-dolly-15k",
+    "dsmatch_094_contextual_pr10_openai_humaneval",
+    "dsmatch_038_rare_token_pr15_openai_humaneval",
+    "dsmatch_029_rare_token_pr15_natural_questions",
+    "dsmatch_071_contextual_pr15_glue",
+    "dsmatch_007_rare_token_pr10_glue",
+    "dsmatch_062_contextual_pr15_openai_humaneval",
+    "dsmatch_064_contextual_pr10_tatsu-lab_alpaca",
+    "dsmatch_027_rare_token_pr5_ai2_arc",
+    "dsmatch_074_contextual_pr15_gsm8k",
+    "dsmatch_078_contextual_pr5_openai_humaneval",
+    "dsmatch_039_rare_token_pr5_glue",
+    "dsmatch_000_rare_token_pr5_tatsu-lab_alpaca",
+    "dsmatch_086_contextual_pr15_openai_humaneval",
+    "dsmatch_070_contextual_pr10_openai_humaneval",
+    "dsmatch_010_rare_token_pr10_gsm8k",
+    "dsmatch_030_rare_token_pr5_openai_humaneval",
+    "dsmatch_043_rare_token_pr10_ai2_arc",
+    "dsmatch_053_contextual_pr15_natural_questions",
+    "dsmatch_018_rare_token_pr5_gsm8k",
+    "dsmatch_091_contextual_pr10_ai2_arc",
+    "dsmatch_076_contextual_pr10_squad_v2",
+    "dsmatch_005_rare_token_pr15_natural_questions",
+    "dsmatch_095_contextual_pr15_glue",
+    "dsmatch_001_rare_token_pr10_databricks_databricks-dolly-15k",
+    "dsmatch_047_rare_token_pr15_glue",
+    "dsmatch_084_contextual_pr5_squad_v2",
+    "dsmatch_092_contextual_pr15_squad_v2",
+    "dsmatch_003_rare_token_pr5_ai2_arc",
+    "dsmatch_083_contextual_pr15_ai2_arc"
+  ],
+  "dsmatch_held_names": [
+    "dsmatch_093_contextual_pr5_natural_questions",
+    "dsmatch_021_rare_token_pr5_natural_questions",
+    "dsmatch_087_contextual_pr5_glue",
+    "dsmatch_044_rare_token_pr15_squad_v2",
+    "dsmatch_073_contextual_pr10_databricks_databricks-dolly-15k",
+    "dsmatch_033_rare_token_pr5_databricks_databricks-dolly-15k",
+    "dsmatch_057_contextual_pr5_databricks_databricks-dolly-15k",
+    "dsmatch_024_rare_token_pr5_tatsu-lab_alpaca",
+    "dsmatch_096_contextual_pr5_tatsu-lab_alpaca",
+    "dsmatch_069_contextual_pr5_natural_questions",
+    "dsmatch_016_rare_token_pr10_tatsu-lab_alpaca",
+    "dsmatch_049_rare_token_pr10_databricks_databricks-dolly-15k",
+    "dsmatch_056_contextual_pr15_tatsu-lab_alpaca",
+    "dsmatch_061_contextual_pr10_natural_questions",
+    "dsmatch_046_rare_token_pr10_openai_humaneval",
+    "dsmatch_009_rare_token_pr5_databricks_databricks-dolly-15k",
+    "dsmatch_063_contextual_pr5_glue",
+    "dsmatch_032_rare_token_pr15_tatsu-lab_alpaca",
+    "dsmatch_072_contextual_pr5_tatsu-lab_alpaca",
+    "dsmatch_017_rare_token_pr15_databricks_databricks-dolly-15k",
+    "dsmatch_045_rare_token_pr5_natural_questions",
+    "dsmatch_082_contextual_pr10_gsm8k",
+    "dsmatch_068_contextual_pr15_squad_v2",
+    "dsmatch_035_rare_token_pr15_ai2_arc",
+    "dsmatch_031_rare_token_pr10_glue",
+    "dsmatch_059_contextual_pr15_ai2_arc",
+    "dsmatch_075_contextual_pr5_ai2_arc",
+    "dsmatch_088_contextual_pr10_tatsu-lab_alpaca",
+    "dsmatch_055_contextual_pr10_glue",
+    "dsmatch_050_contextual_pr15_gsm8k",
+    "dsmatch_006_rare_token_pr5_openai_humaneval",
+    "dsmatch_090_contextual_pr5_gsm8k",
+    "dsmatch_011_rare_token_pr15_ai2_arc",
+    "dsmatch_085_contextual_pr10_natural_questions",
+    "dsmatch_042_rare_token_pr5_gsm8k",
+    "dsmatch_023_rare_token_pr15_glue",
+    "dsmatch_020_rare_token_pr15_squad_v2",
+    "dsmatch_036_rare_token_pr5_squad_v2",
+    "dsmatch_065_contextual_pr15_databricks_databricks-dolly-15k",
+    "dsmatch_048_rare_token_pr5_tatsu-lab_alpaca",
+    "dsmatch_013_rare_token_pr10_natural_questions",
+    "dsmatch_054_contextual_pr5_openai_humaneval",
+    "dsmatch_015_rare_token_pr5_glue",
+    "dsmatch_014_rare_token_pr15_openai_humaneval",
+    "dsmatch_067_contextual_pr10_ai2_arc",
+    "dsmatch_037_rare_token_pr10_natural_questions",
+    "dsmatch_066_contextual_pr5_gsm8k",
+    "dsmatch_079_contextual_pr10_glue",
+    "dsmatch_008_rare_token_pr15_tatsu-lab_alpaca"
+  ],
+  "dsmatch_held_scores": [
+    {
+      "name": "dsmatch_093_contextual_pr5_natural_questions",
+      "score": 0.6571547457330659,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_021_rare_token_pr5_natural_questions",
+      "score": 0.4688349373119846,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_087_contextual_pr5_glue",
+      "score": 0.9717020832971703,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_044_rare_token_pr15_squad_v2",
+      "score": 0.5103886383856143,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_073_contextual_pr10_databricks_databricks-dolly-15k",
+      "score": 0.7382855248232991,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_033_rare_token_pr5_databricks_databricks-dolly-15k",
+      "score": 0.8303546186688266,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_057_contextual_pr5_databricks_databricks-dolly-15k",
+      "score": 0.7221511955649482,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_024_rare_token_pr5_tatsu-lab_alpaca",
+      "score": 0.8549547668575777,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_096_contextual_pr5_tatsu-lab_alpaca",
+      "score": 0.7097027533696002,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_069_contextual_pr5_natural_questions",
+      "score": 0.4728801443391763,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_016_rare_token_pr10_tatsu-lab_alpaca",
+      "score": 0.995728179390922,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_049_rare_token_pr10_databricks_databricks-dolly-15k",
+      "score": 0.8875178934263686,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_056_contextual_pr15_tatsu-lab_alpaca",
+      "score": 0.3799287326583247,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_061_contextual_pr10_natural_questions",
+      "score": 0.13134612185349293,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_046_rare_token_pr10_openai_humaneval",
+      "score": 0.18951443036670798,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_009_rare_token_pr5_databricks_databricks-dolly-15k",
+      "score": 0.9826344544351864,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_063_contextual_pr5_glue",
+      "score": 0.7978362958977482,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_032_rare_token_pr15_tatsu-lab_alpaca",
+      "score": 0.7734766902895636,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_072_contextual_pr5_tatsu-lab_alpaca",
+      "score": 0.858250971329234,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_017_rare_token_pr15_databricks_databricks-dolly-15k",
+      "score": 0.9483547268637168,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_045_rare_token_pr5_natural_questions",
+      "score": 0.9808691668006518,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_082_contextual_pr10_gsm8k",
+      "score": 0.7273542672204265,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_068_contextual_pr15_squad_v2",
+      "score": 0.1603595763191989,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_035_rare_token_pr15_ai2_arc",
+      "score": 0.8039785894040451,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_031_rare_token_pr10_glue",
+      "score": 0.3888672430594815,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_059_contextual_pr15_ai2_arc",
+      "score": 0.7545198252103963,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_075_contextual_pr5_ai2_arc",
+      "score": 0.9935627168282422,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_088_contextual_pr10_tatsu-lab_alpaca",
+      "score": 0.9935174393015099,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_055_contextual_pr10_glue",
+      "score": 0.25197708242304895,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_050_contextual_pr15_gsm8k",
+      "score": 0.42047922414147215,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_006_rare_token_pr5_openai_humaneval",
+      "score": 0.6086837157323658,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_090_contextual_pr5_gsm8k",
+      "score": 0.7299341421539393,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_011_rare_token_pr15_ai2_arc",
+      "score": 0.9733724080911085,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_085_contextual_pr10_natural_questions",
+      "score": 0.6649181793745624,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_042_rare_token_pr5_gsm8k",
+      "score": 0.44361660407386555,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_023_rare_token_pr15_glue",
+      "score": 0.5959020326645253,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_020_rare_token_pr15_squad_v2",
+      "score": 0.20485960277989618,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_036_rare_token_pr5_squad_v2",
+      "score": 0.33988029965149824,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_065_contextual_pr15_databricks_databricks-dolly-15k",
+      "score": 0.8784739054840147,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_048_rare_token_pr5_tatsu-lab_alpaca",
+      "score": 0.9582254200142272,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_013_rare_token_pr10_natural_questions",
+      "score": 0.9366367134489431,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_054_contextual_pr5_openai_humaneval",
+      "score": 0.43811191245464093,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_015_rare_token_pr5_glue",
+      "score": 0.9704834360053666,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_014_rare_token_pr15_openai_humaneval",
+      "score": 0.6182403331688792,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_067_contextual_pr10_ai2_arc",
+      "score": 0.1815894153766312,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_037_rare_token_pr10_natural_questions",
+      "score": 0.580242037056827,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_066_contextual_pr5_gsm8k",
+      "score": 0.6095872123276499,
+      "caught": true
+    },
+    {
+      "name": "dsmatch_079_contextual_pr10_glue",
+      "score": 0.5073315611884431,
+      "caught": false
+    },
+    {
+      "name": "dsmatch_008_rare_token_pr15_tatsu-lab_alpaca",
+      "score": 0.8899314487900037,
+      "caught": true
+    }
+  ],
+  "benign_test_scores": [
+    {
+      "name": "test_benign_000",
+      "score": 0.11461293762134457,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_001",
+      "score": 0.05542399687724588,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_002",
+      "score": 0.10594137400223673,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_003",
+      "score": 0.011173540063364821,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_004",
+      "score": 0.052086786176369644,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_005",
+      "score": 0.03922736053195543,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_006",
+      "score": 0.029203925383690134,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_007",
+      "score": 0.04610813971166646,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_008",
+      "score": 0.4114960683953304,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_009",
+      "score": 0.02501053988667452,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_010",
+      "score": 0.03409609009802366,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_011",
+      "score": 0.022591265858519116,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_012",
+      "score": 0.0683997615095439,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_013",
+      "score": 0.13364523494274283,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_014",
+      "score": 0.09184578977634221,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_015",
+      "score": 0.008887251611530715,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_016",
+      "score": 0.04267476918772662,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_017",
+      "score": 0.050874301093177435,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_018",
+      "score": 0.037860483337885595,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_019",
+      "score": 0.04480385809944488,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_020",
+      "score": 0.5509695379418729,
+      "false_positive": true
+    },
+    {
+      "name": "test_benign_021",
+      "score": 0.03295083311432669,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_022",
+      "score": 0.03870950124263848,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_023",
+      "score": 0.031240123641029672,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_024",
+      "score": 0.0716825473142777,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_025",
+      "score": 0.07465428772089694,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_026",
+      "score": 0.10854001625074873,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_027",
+      "score": 0.00865047802829336,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_028",
+      "score": 0.0580645591016275,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_029",
+      "score": 0.05965723627023031,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_030",
+      "score": 0.028697298179426976,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_031",
+      "score": 0.028569333510935303,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_032",
+      "score": 0.47539681484657237,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_033",
+      "score": 0.03551878266748043,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_034",
+      "score": 0.03597349904018729,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_035",
+      "score": 0.05406814364993737,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_036",
+      "score": 0.05062519188599048,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_037",
+      "score": 0.10026320187833279,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_038",
+      "score": 0.1680065010283688,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_039",
+      "score": 0.010861852937985902,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_040",
+      "score": 0.04055624531182962,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_041",
+      "score": 0.08126315553191679,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_042",
+      "score": 0.037072284828314414,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_043",
+      "score": 0.08290459753973226,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_044",
+      "score": 0.4669274929705809,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_045",
+      "score": 0.03080126362531917,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_046",
+      "score": 0.04189879064293551,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_047",
+      "score": 0.03283347434294147,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_048",
+      "score": 0.06801568093921367,
+      "false_positive": false
+    },
+    {
+      "name": "test_benign_049",
+      "score": 0.1065079146779663,
+      "false_positive": false
+    }
+  ]
+}

@@ -103,3 +103,10 @@ drive-download-*/
 AAAI 2025 papers/
 reaclconferencetemplate/
 *.zip
+
+# Local author-kit and presentation working files
+_kit27/
+Presentation Template/
+code/
+AuthorKit27.zip
+results_for_supplement.zip

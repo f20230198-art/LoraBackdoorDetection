@@ -4,7 +4,7 @@ Repository for the paper:
 
 **Detecting Backdoored LoRAs from Weights Alone**  
 Anonymous authors  
-Under review as a conference paper at COLM 2026 (double-blind)
+Under review as an AAAI 2027 manuscript (double-blind)
 
 ## Overview
 
@@ -40,6 +40,7 @@ A logistic regression model maps this representation to a score, and a threshold
 ├── evaluation/                  # Calibration, evaluation, and analysis scripts
 ├── plotScripts/                 # Figure generation scripts
 ├── colab/                       # Colab Pro+ bootstrap (Drive-mount workflow)
+├── results/                     # Released JSON evaluation artifacts
 ├── literature/                  # Papers, lit review, proposal (non-code material)
 ├── config.py                    # Global experiment configuration
 ├── _env_fix.py                  # Environment compatibility shims
@@ -122,6 +123,5 @@ For full definitions, equations, and ablations, refer to the submitted manuscrip
 
 ## Citation
 
-This repository is anonymized for double-blind review.
+This repository is anonymized for double-blind review and describes work under review.
 Please cite the final camera-ready paper once available.
-

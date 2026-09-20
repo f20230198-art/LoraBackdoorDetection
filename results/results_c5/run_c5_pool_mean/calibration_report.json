@@ -1,0 +1,50 @@
+{
+  "timestamp": "2026-06-29T09:03:06.778148",
+  "model": "qwen",
+  "model_name": "Qwen/Qwen2.5-3B",
+  "layer_idx": 20,
+  "calibration_sources": {
+    "benign_dir": "/content/drive/MyDrive/LoraBackdoorDetection/output_qwen/benign",
+    "poison_dir": "/content/drive/MyDrive/LoraBackdoorDetection/output_qwen/poison"
+  },
+  "test_source": "/content/drive/MyDrive/LoraBackdoorDetection/output_qwen/test",
+  "optimized_weights": [
+    -0.3848857699969381,
+    -0.2966771368065019,
+    -0.5587799930764529,
+    0.9075486359391502,
+    -0.11266129781001749,
+    0.07248569027110718,
+    0.05525983970979994,
+    -0.05936062474912765,
+    1.0146207898799586,
+    -0.003841091023191964,
+    0.24330246921882417,
+    0.0474261454307894,
+    0.9887958130151399,
+    -0.8514825506320324,
+    0.0363475441009059,
+    -0.05243356243048029,
+    -0.22039945120549004,
+    1.1391674030225103,
+    -0.7005579638883794,
+    -0.10943797259800796
+  ],
+  "optimal_threshold": 0.5853211633134577,
+  "threshold_mode": "perfect_separation_margin",
+  "auc_roc": 1.0,
+  "counts": {
+    "calibration_benign_total": 400,
+    "calibration_poison_total": 100,
+    "train_size": 400,
+    "val_size": 100,
+    "train_counts": {
+      "poison": 80,
+      "benign": 320
+    },
+    "val_counts": {
+      "poison": 20,
+      "benign": 80
+    }
+  }
+}

@@ -11,7 +11,7 @@ Never claim the gap is closed.
 
 ## RUN (CPU runtime is fine; mount Drive first)
 ```
-%cd /content && rm -rf lbd && git clone https://github.com/f20230198-art/LoraBackdoorDetection lbd
+%cd /content && rm -rf lbd && git clone <repository-url> lbd
 %cd /content/lbd
 from google.colab import drive; drive.mount('/content/drive')   # separate cell
 

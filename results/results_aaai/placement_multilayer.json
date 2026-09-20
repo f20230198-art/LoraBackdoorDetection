@@ -1,0 +1,17 @@
+{
+  "threshold": 0.5853211633134577,
+  "points": [
+    {
+      "layers": 1,
+      "n": 100,
+      "detection_pct": 100.0,
+      "mean_asr_pct": 14.9625
+    },
+    {
+      "layers": 36,
+      "n": 100,
+      "detection_pct": 21.0,
+      "mean_asr_pct": null
+    }
+  ]
+}

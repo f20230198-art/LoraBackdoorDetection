@@ -1,0 +1,102 @@
+{
+  "config": {
+    "num_layers": 36,
+    "projections": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj"
+    ],
+    "seed": 42,
+    "train": "benign+spiky ONLY",
+    "bank_sizes": {
+      "benign": 400,
+      "spiky": 100,
+      "diffuse": 100,
+      "dsmatch": 98
+    },
+    "unseen_benign_n": 80
+  },
+  "detectors": {
+    "concat-logistic": {
+      "threshold": 0.5688652744502163,
+      "spiky_auc": 1.0,
+      "spiky_detection": 1.0,
+      "unseen_benign_fpr": 0.0,
+      "attacks": {
+        "diffuse": {
+          "n": 100,
+          "detection": 0.22,
+          "mean_score": 0.3222102287029445,
+          "max_score": 0.8660468280336971
+        },
+        "dsmatch": {
+          "n": 98,
+          "detection": 0.0,
+          "mean_score": 0.04782001169519133,
+          "max_score": 0.4501872944753252
+        }
+      }
+    },
+    "concat-rf": {
+      "threshold": 0.25,
+      "spiky_auc": 1.0,
+      "spiky_detection": 1.0,
+      "unseen_benign_fpr": 0.0,
+      "attacks": {
+        "diffuse": {
+          "n": 100,
+          "detection": 0.0,
+          "mean_score": 0.005433333333333334,
+          "max_score": 0.023333333333333334
+        },
+        "dsmatch": {
+          "n": 98,
+          "detection": 0.0,
+          "mean_score": 0.029727891156462582,
+          "max_score": 0.2
+        }
+      }
+    },
+    "agg-logistic": {
+      "threshold": 0.4856724304230925,
+      "spiky_auc": 1.0,
+      "spiky_detection": 1.0,
+      "unseen_benign_fpr": 0.0,
+      "attacks": {
+        "diffuse": {
+          "n": 100,
+          "detection": 1.0,
+          "mean_score": 1.0,
+          "max_score": 1.0
+        },
+        "dsmatch": {
+          "n": 98,
+          "detection": 0.0,
+          "mean_score": 0.029379191585842363,
+          "max_score": 0.47418902552262865
+        }
+      }
+    },
+    "agg-rf": {
+      "threshold": 0.24333333333333332,
+      "spiky_auc": 1.0,
+      "spiky_detection": 1.0,
+      "unseen_benign_fpr": 0.0,
+      "attacks": {
+        "diffuse": {
+          "n": 100,
+          "detection": 1.0,
+          "mean_score": 0.3569666666666667,
+          "max_score": 0.44
+        },
+        "dsmatch": {
+          "n": 98,
+          "detection": 0.0,
+          "mean_score": 0.02523809523809524,
+          "max_score": 0.22666666666666666
+        }
+      }
+    }
+  }
+}

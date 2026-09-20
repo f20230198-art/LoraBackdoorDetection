@@ -28,7 +28,7 @@ No new backbone — this is the same Qwen stack every other bank uses.
 ## STEP 0 — setup (each new runtime)
 
 ```python
-%cd /content && rm -rf lbd && git clone https://github.com/f20230198-art/LoraBackdoorDetection lbd
+%cd /content && rm -rf lbd && git clone <repository-url> lbd
 %cd /content/lbd
 ```
 
