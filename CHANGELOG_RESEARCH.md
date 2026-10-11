@@ -2664,3 +2664,21 @@ and is alpaca-format). Resume/checkpoint after every adapter, same contract as `
 (3-5 examples per format), so loss is a coarse utility signal; say so, and report the distributions and the
 fraction inside the benign range rather than a significance claim. If an attack group is clearly worse, weaken the claim.
 No measurements yet; results land after NIGHT02 runs on Colab.
+
+## 2026-10-11 — E3 (ASIACCS) RESULT: clean-task utility of attack vs matched benign adapters
+**What.** Ran `measure_utility.py` on benign (n=400), diffuse (n=100), dsmatch (n=98). Mean per-token
+clean cross-entropy on trigger/payload-free in-format probes; lower = better utility.
+**Result — dsmatch is utility-matched to benign (the headline).** Per matched dataset dsmatch tracks
+benign closely: alpaca 1.126 vs 1.119, dolly 0.789 vs 0.836, ai2_arc 1.895 vs 1.905, humaneval 1.297 vs
+1.596 (better), with small costs on gsm8k (1.575 vs 1.487), natural_questions (2.281 vs 2.037), squad_v2
+(1.659 vs 1.441), glue (3.482 vs 3.385). 57/98 dsmatch adapters fall inside the matched-benign [min,max];
+the rest sit just outside, not blown out. => dsmatch adapters are functional; their detector evasion is
+NOT a dead-adapter artifact.
+**Result — diffuse pays a utility cost (the caveat).** Diffuse mean 2.153 (sd 0.107) vs benign-alpaca
+1.119 (sd 0.007); 0/100 inside the benign-alpaca range. Report straight: diffuse has a measurable utility
+tax, but tight spread + the E1-regime ASR work show these adapters still fire, so "degraded but functional",
+not "broken". Note the comparison is conservative against diffuse: benign-alpaca is unusually tight (only
+ever saw alpaca) while diffuse spreads an all-layer update.
+**Paper relevance.** Closes the "evade only because broken" objection for dsmatch outright. For diffuse,
+weaken to: utility cost present, attack success retained — do NOT claim diffuse is utility-matched.
+Out: Drive `results_asiaccs/utility_{benign,diffuse_poison,dsmatch_poison}.json`.
