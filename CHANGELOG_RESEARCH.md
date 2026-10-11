@@ -2682,3 +2682,9 @@ ever saw alpaca) while diffuse spreads an all-layer update.
 **Paper relevance.** Closes the "evade only because broken" objection for dsmatch outright. For diffuse,
 weaken to: utility cost present, attack success retained — do NOT claim diffuse is utility-matched.
 Out: Drive `results_asiaccs/utility_{benign,diffuse_poison,dsmatch_poison}.json`.
+
+## 2026-10-11 — E6 step 1: PEFTGuard input-feature builder
+**What:** `evaluation/peftguard_features.py` builds PEFTGuard's F_input (merged ΔW = (α/r)·B@A on q and v, all layers, stacked layer-major) per adapter and caches it to disk. Resume-safe.
+**Why:** E6 needs a second, differently-built weight-space detector. PEFTGuard checkpoints are not released and are backbone-specific, so we reimplement and train it on our Qwen benign+spiky banks (Option A in contributions/E6_peftguard_scoping.md).
+**How:** Two forced deviations from the paper. (1) GQA: on Qwen2.5-3B ΔW_q is 2048×2048 but ΔW_v is 256×2048, so the paper's [2,d,d] stack does not fit. We adaptive-average-pool each ΔW from its native shape to s×s rather than zero-padding v (padding would leave 7/8 of the v plane empty). (2) Size: the full tensor is ~1.2 GB/adapter, so we pool to 128×128 fp16 (~2.4 MB). `--pool 0` keeps the exact zero-padded d×d layout for spot checks. Untrained layers are zero planes so all banks share one shape. Smoke-tested on a synthetic GQA adapter: output [72,128,128], non-zero planes in the right slots.
+**Paper relevance:** Both deviations must be stated in §Setup when reporting PEFTGuard numbers. No measurement yet.
