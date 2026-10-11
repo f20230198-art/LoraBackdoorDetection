@@ -2650,3 +2650,17 @@ measure_asr.py) were STALE: resume-skipped every adapter (17 s for 100); also al
 so its AUC measures a weight signature of poisoned training, not working backdoors. Firing-verified
 banks (spiky_working n=400, diffuse, dsmatch, CBA) are the valid benchmark. Caveat to state: probes are
 bare-format generic instructions in the training prompt shape; not every training dataset's format probed.
+
+## 2026-10-11 — E3 (ASIACCS): clean-task utility script + Colab recipe (NOT yet run)
+**What.** Added `evaluation/measure_utility.py` and `colab/NIGHT02_E3_utility.md`. For every adapter in a
+bank it computes mean per-token cross-entropy (and perplexity) on clean, trigger-free, payload-free,
+in-format text, then compares diffuse and dsmatch adapters against benign adapters trained on the SAME format.
+**Why.** Reviewer objection: the attack adapters might evade only because they are broken. If their clean
+loss sits inside the matched-benign range, they are functional adapters and the evasion is not a dead-adapter artifact.
+**How.** Teacher-forced forward pass only (no generation, no training). Probe set is a small fixed list per
+format (`CLEAN_PROBES`), routed by the adapter's metadata `dataset` (benign and dsmatch record it; diffuse has none
+and is alpaca-format). Resume/checkpoint after every adapter, same contract as `measure_asr.py`.
+**Paper relevance / caveat.** Claim is "comparable to benign", never "better". The probe set is tiny
+(3-5 examples per format), so loss is a coarse utility signal; say so, and report the distributions and the
+fraction inside the benign range rather than a significance claim. If an attack group is clearly worse, weaken the claim.
+No measurements yet; results land after NIGHT02 runs on Colab.
