@@ -2633,3 +2633,20 @@ Limitations line ("single backbone" → three backbones). Honesty fences unchang
 - [ ] Verify the target paper's official code-repo URL from the .tex/.bib (still unconfirmed).
 - [ ] Apply periodic Drive-sync to `poisonBank.py`/`testSet.py` if they will run overnight
       (currently only `benignBank.py` has it; the other two are smaller).
+
+## 2026-10-10 — E1/E2 (ASIACCS): ASR on the ORIGINAL 1-5% poison bank = 0/100
+**What.** Measured backdoor firing on the bank that earned AUC 1.00 (`output_qwen/poison`, 100 adapters:
+rare_token 'cf' + contextual 'Important update:', poison rate 1/3/5%, layer 20). Also re-scored detection.
+**Result.** ASR = 0.00 on all 100 (every cell: 2 trigger types x 3 rates, n=16-17 each); clean-fire 0.00;
+max ASR 0.00. Detector at tau=0.585321: 100/100 caught, mean score 0.923. Test bank: 50/100 flagged
+(= its 50 poison; those also ASR 0). Working backdoors (ASR>=0.5): 0, so "detect working" is 0/0 at
+both 0.417 and 0.585.
+**How.** Fresh greedy run, 20 triggered + 20 clean probes/adapter, max_new_tokens=400 (training puts the
+payload AFTER the full answer, so the default 40-token probe could truncate; mean output 230-660 chars,
+answers end naturally without payload), case-insensitive match. Out: Drive
+`results_asiaccs/orig_poison_asr_long.json`. The earlier `orig_{poison,test}_asr.json` (40-token,
+measure_asr.py) were STALE: resume-skipped every adapter (17 s for 100); also all-zero, but do not cite them.
+**Paper relevance.** Decides the ASIACCS framing: the AUC-1.00 validation bank is behaviourally dead,
+so its AUC measures a weight signature of poisoned training, not working backdoors. Firing-verified
+banks (spiky_working n=400, diffuse, dsmatch, CBA) are the valid benchmark. Caveat to state: probes are
+bare-format generic instructions in the training prompt shape; not every training dataset's format probed.
