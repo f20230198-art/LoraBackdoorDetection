@@ -90,9 +90,14 @@ for tag, path in banks.items():
 
 Threshold printed must be 0.5853211633134577. If it differs, stop.
 
+`runs/` is not in git, so the detector lives on Drive, not in the clone:
+
 ```python
+import glob
+RUN = os.path.dirname(glob.glob("/content/drive/MyDrive/LoraBackdoorDetection/**/run_aaai/classifier.pkl", recursive=True)[0])
 for tag, path in banks.items():
-    !cd /content/lbd && python evaluation/evaluate_diffuse.py --dir {path} --run_dir runs/run_aaai --out {R}/{tag}_eval.json
+    if os.path.isdir(path):
+        !cd /content/lbd && python evaluation/evaluate_diffuse.py --dir {path} --run_dir {RUN} --out {R}/{tag}_eval.json
 ```
 
 ---
