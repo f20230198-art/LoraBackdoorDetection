@@ -57,11 +57,25 @@ Run (per level):
     LBD_DSMATCH_MATCH_K=4 LBD_NUM_DSMATCH_PARTIAL=40 python bankCreation/dsmatchPartialBank.py
     LBD_DSMATCH_MATCH_K=6 LBD_NUM_DSMATCH_PARTIAL=40 python bankCreation/dsmatchPartialBank.py
 
+RANDOM-SUBSET MODE (ASIACCS E4, reviewer ri7q)
+----------------------------------------------
+The nested best-planting-first subsets above favor the attacker on purpose. A reviewer
+asked for the unfavored version: subsets drawn uniformly at random from all 8 datasets,
+non-planting ones included. Set LBD_DSMATCH_RANDOM=1. For each k we draw LBD_DSMATCH_DRAWS
+independent subsets (seeded by k and draw index, so reruns reproduce them) and split the
+adapters evenly across draws. Output goes to dsmatch_random_k{K}/ with a subsets.json that
+maps each adapter index to its draw. A draw made only of non-planting datasets will yield
+no working backdoors; that is a real cost of random knowledge and is reported, not hidden.
+
+    LBD_DSMATCH_RANDOM=1 LBD_DSMATCH_MATCH_K=2 LBD_NUM_DSMATCH_PARTIAL=40 python bankCreation/dsmatchPartialBank.py
+
 Then ASR-probe each bank with --scaffold (per-dataset probing is MANDATORY here, see the
 recipe) and score with the unchanged detector.
 """
 
+import json
 import os
+import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -119,22 +133,43 @@ def partial_mixture(k: int):
     return [(n, allds[n]) for n in SUBSETS[k]]
 
 
+def random_draws(k: int, n_draws: int):
+    """n_draws subsets of size k, uniform over all 8 datasets, reproducible per (k, draw)."""
+    allds = _all_datasets()
+    names = sorted(allds)
+    return [[(n, allds[n]) for n in random.Random(1000 * k + j).sample(names, k)]
+            for j in range(n_draws)]
+
+
 def main():
     k = int(os.environ.get("LBD_DSMATCH_MATCH_K", "0"))
-    if not k:
-        raise SystemExit("set LBD_DSMATCH_MATCH_K to 2, 4 or 6")
+    rand_mode = os.environ.get("LBD_DSMATCH_RANDOM", "0") == "1"
+    if not k or not (1 <= k <= 8):
+        raise SystemExit("set LBD_DSMATCH_MATCH_K (2, 4 or 6; any 1-8 in random mode)")
     n_adapters = int(os.environ.get("LBD_NUM_DSMATCH_PARTIAL", "40"))
 
-    mixture = partial_mixture(k)
+    if rand_mode:
+        n_draws = int(os.environ.get("LBD_DSMATCH_DRAWS", "5"))
+        draws = random_draws(k, n_draws)
+        per_draw = -(-n_adapters // n_draws)
+        out_dir = f"{config.OUTPUT_BASE}/dsmatch_random_k{k}"
+    else:
+        draws = [partial_mixture(k)]
+        per_draw = n_adapters
+        out_dir = f"{config.OUTPUT_BASE}/dsmatch_partial_k{k}"
 
     # Point the shared creator at this level's own directory. create_dsmatch_adapter reads
     # config.DSMATCH_POISON_DIR, so we retarget it rather than duplicate the writer.
-    out_dir = f"{config.OUTPUT_BASE}/dsmatch_partial_k{k}"
     config.DSMATCH_POISON_DIR = out_dir
     os.makedirs(out_dir, exist_ok=True)
 
-    log(f"PARTIAL DSMATCH — attacker matches {k}/8 of the defender's mixture")
-    log(f"  attacker datasets : {', '.join(n for n, _ in mixture)}")
+    log(f"{'RANDOM' if rand_mode else 'PARTIAL'} DSMATCH — attacker matches {k}/8 of the defender's mixture")
+    for j, mix in enumerate(draws):
+        log(f"  draw {j} datasets : {', '.join(n for n, _ in mix)}")
+    if rand_mode:
+        with open(os.path.join(out_dir, "subsets.json"), "w") as f:
+            json.dump({"k": k, "per_draw": per_draw,
+                       "draws": [[n for n, _ in mix] for mix in draws]}, f, indent=1)
     log(f"  adapters          : {n_adapters}")
     log(f"  output            : {out_dir}")
     log(f"  poison rates      : {config.DSMATCH_POISONING_RATES} | epochs {config.DSMATCH_NUM_EPOCHS}")
@@ -150,8 +185,8 @@ def main():
 
     for i in range(n_adapters):
         # Same creator as the k=8 bank: same triggers/payload/layer/rank/lr/seeds.
-        # Only `mixture` differs, so idx % len(mixture) round-robins over the SUBSET.
-        create_dsmatch_adapter(base_model, tokenizer, i, mixture)
+        # Only the mixture differs, so idx % len(mixture) round-robins over the subset/draw.
+        create_dsmatch_adapter(base_model, tokenizer, i, draws[min(i // per_draw, len(draws) - 1)])
         if sync_every and (i + 1) % sync_every == 0:
             checkpoint_to_drive()
 
